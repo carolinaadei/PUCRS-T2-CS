@@ -1,0 +1,42 @@
+site_name: Documentação
+
+copyright: Logo and Favicon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>
+
+repo_name: profschardosim/construcao-2026.2-t1
+repo_url: https://github.com/profschardosim/construcao-2026.2-t1
+
+edit_uri: ""
+
+theme:
+  name: material
+
+  logo: stylesheets/assets/logo.png
+
+  favicon: stylesheets/assets/logo.png
+
+  icon:
+    repo: fontawesome/brands/github
+
+  features:
+    - navigation.tabs
+    - navigation.top
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/profschardosim/construcao-2026.2-t1
+
+markdown_extensions:
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+
+nav:
+  - Artefatos:
+    - Início: index.md
+    - Documento de Requisitos: requirements.md
+    - Documento de Arquitetura: architecture.md
+    - Identidade Visual: visual_id.md
