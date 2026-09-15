@@ -21,6 +21,10 @@ describe('AppModule (e2e)', () => {
       findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
     },
+    usuario: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
   };
 
   beforeAll(async () => {
@@ -59,5 +63,53 @@ describe('AppModule (e2e)', () => {
       .post('/api/auth/registrar')
       .send({ nome: 'Teste', email: 'nao-e-email', senha: '123' })
       .expect(400);
+  });
+
+  describe('POST /api/auth/registrar - cadastro (RF01)', () => {
+    const payload = {
+      nome: 'Ana Souza',
+      email: 'ana.souza@example.com',
+      senha: 'senhaSegura123',
+    };
+
+    beforeEach(() => {
+      prismaMock.usuario.findUnique.mockReset();
+      prismaMock.usuario.create.mockReset();
+    });
+
+    it('cria a conta e devolve token + usuario (201)', async () => {
+      prismaMock.usuario.findUnique.mockResolvedValue(null);
+      prismaMock.usuario.create.mockResolvedValue({ id: 1, ...payload, senha: undefined });
+
+      const resposta = await request(app.getHttpServer())
+        .post('/api/auth/registrar')
+        .send(payload)
+        .expect(201);
+
+      expect(typeof resposta.body.accessToken).toBe('string');
+      expect(resposta.body.usuario).toMatchObject({ id: 1, email: payload.email });
+      expect(JSON.stringify(resposta.body)).not.toContain('senhaHash');
+    });
+
+    it('rejeita e-mail ja cadastrado (409)', async () => {
+      prismaMock.usuario.findUnique.mockResolvedValue({ id: 1 });
+
+      const resposta = await request(app.getHttpServer())
+        .post('/api/auth/registrar')
+        .send(payload)
+        .expect(409);
+
+      expect(resposta.body.message).toBe('Ja existe uma conta com este e-mail');
+      expect(prismaMock.usuario.create).not.toHaveBeenCalled();
+    });
+
+    it('rejeita campo nao declarado no DTO (400)', () => {
+      prismaMock.usuario.findUnique.mockResolvedValue(null);
+
+      return request(app.getHttpServer())
+        .post('/api/auth/registrar')
+        .send({ ...payload, admin: true })
+        .expect(400);
+    });
   });
 });

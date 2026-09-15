@@ -15,7 +15,9 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefixo);
   app.use(helmet());
-  app.enableCors({ origin: config.get<string>('corsOrigin'), credentials: true });
+
+  const origem = config.get<string>('corsOrigin')!;
+  app.enableCors({ origin: origem, credentials: origem !== '*' });
 
   app.useGlobalPipes(
     new ValidationPipe({

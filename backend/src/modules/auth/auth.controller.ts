@@ -1,5 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { Publico } from '../../common/decorators/publico.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -7,6 +8,8 @@ import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
 
 @ApiTags('Autenticacao')
+@ApiResponse({ status: 429, description: 'Limite de requisicoes por IP excedido' })
+@UseGuards(ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
