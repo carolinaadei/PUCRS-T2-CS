@@ -20,6 +20,14 @@ export const configuracao = () => ({
   integracoes: {
     googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY ?? '',
   },
+
+  frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3001',
+
+  mail: {
+    brevoApiKey: process.env.BREVO_API_KEY ?? '',
+    remetenteEmail: process.env.BREVO_SENDER_EMAIL ?? '',
+    remetenteNome: process.env.BREVO_SENDER_NOME ?? 'ViajaJunto',
+  },
 });
 
 export type Configuracao = ReturnType<typeof configuracao>;

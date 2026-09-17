@@ -72,8 +72,25 @@ model Usuario {
   viagensCriadas Viagem[]        @relation("ViagensCriadas")
   membroEm       MembroViagem[]
   avaliacoes     Avaliacao[]
+  tokensRecuperacaoSenha TokenRecuperacaoSenha[]
 
   @@map("usuario")
+}
+
+/// RF03 - token de uso unico para redefinicao de senha via e-mail (Brevo).
+/// Apenas o hash do token e persistido; o valor em claro so existe no link enviado por e-mail.
+model TokenRecuperacaoSenha {
+  id        Int       @id @default(autoincrement())
+  usuarioId Int       @map("usuario_id")
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiraEm  DateTime  @map("expira_em")
+  usadoEm   DateTime? @map("usado_em")
+  criadoEm  DateTime  @default(now()) @map("criado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("token_recuperacao_senha")
 }
 
 /// RF04 a RF07 - a viagem e a raiz de agregacao do planejamento.

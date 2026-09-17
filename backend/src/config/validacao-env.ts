@@ -1,5 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import {
+  IsEmail,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -40,6 +41,22 @@ class VariaveisAmbiente {
   @IsString()
   @IsOptional()
   JWT_EXPIRES_IN?: string;
+
+  // RF03 - base do link de redefinicao enviado por e-mail.
+  @IsString()
+  @IsNotEmpty({ message: 'FRONTEND_URL e obrigatoria (veja .env.example)' })
+  FRONTEND_URL!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'BREVO_API_KEY e obrigatoria (veja .env.example)' })
+  BREVO_API_KEY!: string;
+
+  @IsEmail({}, { message: 'BREVO_SENDER_EMAIL deve ser um e-mail valido' })
+  BREVO_SENDER_EMAIL!: string;
+
+  @IsString()
+  @IsOptional()
+  BREVO_SENDER_NOME?: string;
 }
 
 export function validarEnv(config: Record<string, unknown>) {
