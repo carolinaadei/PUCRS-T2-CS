@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { LogInterceptor } from './common/interceptors/log.interceptor';
 import { configuracao } from './config/configuracao';
@@ -24,8 +23,6 @@ import { PrismaModule } from './prisma/prisma.module';
       load: [configuracao],
       validate: validarEnv,
     }),
-
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 10 }]),
     PrismaModule,
 
     // Modulos de dominio (ver Documento de Requisitos, Secao 3)
