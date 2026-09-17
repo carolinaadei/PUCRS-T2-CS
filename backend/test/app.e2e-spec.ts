@@ -1,6 +1,7 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -35,9 +36,7 @@ describe('AppModule (e2e)', () => {
 
     app = modulo.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
+    app.useGlobalPipes(criarPipeValidacao());
 
     await app.init();
   });
@@ -110,6 +109,39 @@ describe('AppModule (e2e)', () => {
         .post('/api/auth/registrar')
         .send({ ...payload, admin: true })
         .expect(400);
+    });
+
+    it('devolve as mensagens de validacao em portugues', async () => {
+      prismaMock.usuario.findUnique.mockResolvedValue(null);
+
+      const resposta = await request(app.getHttpServer())
+        .post('/api/auth/registrar')
+        .send({ nome: '', email: 'nao-e-email', senha: '123' })
+        .expect(400);
+
+      expect(resposta.body.message).toEqual(
+        expect.arrayContaining([
+          'nome nao pode ficar em branco',
+          'Informe um e-mail valido',
+          'A senha deve ter no minimo 8 caracteres',
+        ]),
+      );
+    });
+
+    it('traduz limites e campos fora do contrato', async () => {
+      prismaMock.usuario.findUnique.mockResolvedValue(null);
+
+      const resposta = await request(app.getHttpServer())
+        .post('/api/auth/registrar')
+        .send({ ...payload, nome: 'n'.repeat(121), admin: true })
+        .expect(400);
+
+      expect(resposta.body.message).toEqual(
+        expect.arrayContaining([
+          'nome deve ter no maximo 120 caracteres',
+          'admin nao e um campo valido',
+        ]),
+      );
     });
   });
 });

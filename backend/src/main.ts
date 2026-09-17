@@ -1,10 +1,11 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ExcecaoPrismaFilter } from './common/filters/excecao-prisma.filter';
+import { criarPipeValidacao } from './common/pipes/pipe-validacao';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -19,14 +20,7 @@ async function bootstrap() {
   const origem = config.get<string>('corsOrigin')!;
   app.enableCors({ origin: origem, credentials: origem !== '*' });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // remove campos nao declarados nos DTOs
-      forbidNonWhitelisted: true, // e rejeita a requisicao se houver algum
-      transform: true, // converte payloads em instancias dos DTOs
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
+  app.useGlobalPipes(criarPipeValidacao());
 
   app.useGlobalFilters(new ExcecaoPrismaFilter());
 
