@@ -8,16 +8,27 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { PayloadJwt } from '../../common/types/usuario-autenticado';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
+import { RespostaVerificacaoDto } from './dto/resposta-verificacao.dto';
 
-/** RF03 - janela de validade do token de redefinicao. */
-const MINUTOS_VALIDADE_TOKEN = 30;
+/** RF03 - janela de validade do codigo de 6 digitos enviado por e-mail. */
+const MINUTOS_VALIDADE_CODIGO = 15;
+
+/** RF03 - janela para concluir a troca depois que o codigo conferiu. */
+const MINUTOS_VALIDADE_TROCA = 10;
+
+/**
+ * RF03 - codigos errados aceitos antes de queimar o registro.
+ * Sem isto, 10^6 combinacoes sao poucas para quem consegue trocar de IP e
+ * escapar do ThrottlerGuard.
+ */
+const MAX_TENTATIVAS = 5;
 
 @Injectable()
 export class AuthService {
@@ -82,7 +93,7 @@ export class AuthService {
   }
 
   /**
-   * RF03 - gera o token de uso unico e dispara o e-mail com o link de redefinicao.
+   * RF03 - etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
    * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma.
    */
   async solicitarRecuperacaoSenha(email: string): Promise<void> {
@@ -97,48 +108,118 @@ export class AuthService {
       return;
     }
 
-    const token = randomBytes(32).toString('base64url');
-    const expiraEm = new Date(Date.now() + MINUTOS_VALIDADE_TOKEN * 60 * 1000);
+    const codigo = this.gerarCodigo();
+    const expiraEm = new Date(Date.now() + MINUTOS_VALIDADE_CODIGO * 60 * 1000);
 
-    // Invalida tokens anteriores ainda pendentes: apenas o ultimo link vale.
+    // Invalida codigos anteriores ainda pendentes: apenas o ultimo vale.
     await this.prisma.$transaction([
       this.prisma.tokenRecuperacaoSenha.updateMany({
         where: { usuarioId: usuario.id, usadoEm: null },
         data: { usadoEm: new Date() },
       }),
       this.prisma.tokenRecuperacaoSenha.create({
-        data: { usuarioId: usuario.id, tokenHash: this.hashToken(token), expiraEm },
+        data: { usuarioId: usuario.id, codigoHash: this.hashCodigo(codigo), expiraEm },
       }),
     ]);
 
-    const frontendUrl = this.configService.get<string>('frontendUrl')!;
-    const link = `${frontendUrl.replace(/\/$/, '')}/redefinir-senha?token=${token}`;
-
     // Atalho de desenvolvimento: o nivel `debug` normalmente esta desligado em producao.
-    this.logger.debug(`Link de redefinicao para ${usuario.email}: ${link}`);
+    this.logger.debug(`Codigo de recuperacao para ${usuario.email}: ${codigo}`);
 
     try {
       await this.mailService.enviarEmail(
         { email: usuario.email, nome: usuario.nome },
-        'Redefinicao de senha - ViajaJunto',
-        this.montarEmailRecuperacao(usuario.nome, link),
+        'Seu codigo de recuperacao - ViajaJunto',
+        this.montarEmailCodigo(codigo),
       );
     } catch (erro) {
-      // O token ja esta persistido e continua valido; falha de envio nao vaza para o cliente.
+      // O codigo ja esta persistido e continua valido; falha de envio nao vaza para o cliente.
       this.logger.error(`Falha ao enviar e-mail de recuperacao: ${String(erro)}`);
     }
   }
 
-  /** RF03 - troca a senha validando o token de uso unico. */
-  async redefinirSenha(token: string, novaSenha: string): Promise<void> {
+  /**
+   * RF03 - etapa 2: confere o codigo e emite o token que autoriza a troca.
+   * A senha ainda nao muda aqui.
+   */
+  async verificarCodigo(email: string, codigo: string): Promise<RespostaVerificacaoDto> {
+    const emailNormalizado = email.trim().toLowerCase();
+
+    // Mensagem unica para e-mail desconhecido, codigo errado, expirado ou queimado:
+    // responder diferente entregaria quais e-mails existem.
+    const codigoInvalido = new BadRequestException('Codigo invalido ou expirado');
+
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { email: emailNormalizado },
+      select: { id: true },
+    });
+
+    if (!usuario) {
+      throw codigoInvalido;
+    }
+
+    // Registros queimados tem `usadoEm` preenchido, entao ficam de fora da busca.
+    const registro = await this.prisma.tokenRecuperacaoSenha.findFirst({
+      where: { usuarioId: usuario.id, usadoEm: null },
+      orderBy: { criadoEm: 'desc' },
+    });
+
+    if (!registro || registro.expiraEm < new Date()) {
+      throw codigoInvalido;
+    }
+
+    if (!this.codigoConfere(codigo, registro.codigoHash)) {
+      const tentativas = registro.tentativas + 1;
+
+      await this.prisma.tokenRecuperacaoSenha.update({
+        where: { id: registro.id },
+        data: {
+          tentativas,
+          // Esgotou o teto: queima o codigo em vez de deixar continuar adivinhando.
+          ...(tentativas >= MAX_TENTATIVAS ? { usadoEm: new Date() } : {}),
+        },
+      });
+
+      throw codigoInvalido;
+    }
+
+    const tokenTroca = randomBytes(32).toString('base64url');
+    const trocaExpiraEm = new Date(Date.now() + MINUTOS_VALIDADE_TROCA * 60 * 1000);
+
+    await this.prisma.tokenRecuperacaoSenha.update({
+      where: { id: registro.id },
+      data: {
+        verificadoEm: new Date(),
+        trocaHash: this.hashToken(tokenTroca),
+        trocaExpiraEm,
+      },
+    });
+
+    return { tokenTroca, expiraEm: trocaExpiraEm.toISOString() };
+  }
+
+  /** RF03 - etapa 3: troca a senha, autorizada pelo token emitido na etapa 2. */
+  async redefinirSenha(
+    tokenTroca: string,
+    novaSenha: string,
+    confirmarNovaSenha: string,
+  ): Promise<void> {
+    if (novaSenha !== confirmarNovaSenha) {
+      throw new BadRequestException('A confirmacao nao confere com a nova senha');
+    }
+
     const registro = await this.prisma.tokenRecuperacaoSenha.findUnique({
-      where: { tokenHash: this.hashToken(token) },
-      select: { id: true, usuarioId: true, expiraEm: true, usadoEm: true },
+      where: { trocaHash: this.hashToken(tokenTroca) },
+      select: { id: true, usuarioId: true, trocaExpiraEm: true, usadoEm: true },
     });
 
     // Mensagem unica para token inexistente, ja usado ou expirado.
-    if (!registro || registro.usadoEm || registro.expiraEm < new Date()) {
-      throw new BadRequestException('Token invalido ou expirado');
+    if (
+      !registro ||
+      registro.usadoEm ||
+      !registro.trocaExpiraEm ||
+      registro.trocaExpiraEm < new Date()
+    ) {
+      throw new BadRequestException('Sessao de redefinicao invalida ou expirada');
     }
 
     const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
@@ -156,17 +237,40 @@ export class AuthService {
     ]);
   }
 
-  /** O token tem alta entropia, logo SHA-256 basta (nao e uma senha de usuario). */
+  /** `randomInt` e uniforme e vem do CSPRNG; o padStart preserva zeros a esquerda. */
+  private gerarCodigo(): string {
+    return randomInt(0, 1_000_000).toString().padStart(6, '0');
+  }
+
+  /**
+   * Um codigo de 6 digitos tem so 10^6 preimagens: SHA-256 puro seria revertido
+   * em segundos por quem lesse o banco. O HMAC com segredo do servidor faz o
+   * acesso ao banco, sozinho, nao bastar.
+   */
+  private hashCodigo(codigo: string): string {
+    const segredo = this.configService.get<string>('seguranca.segredoRecuperacao')!;
+    return createHmac('sha256', segredo).update(codigo).digest('hex');
+  }
+
+  /** O token de troca tem 256 bits de entropia, logo SHA-256 basta. */
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  private montarEmailRecuperacao(nome: string, link: string): string {
+  /** Comparacao em tempo constante: o tempo de resposta nao entrega digitos certos. */
+  private codigoConfere(codigo: string, hashArmazenado: string): boolean {
+    const calculado = Buffer.from(this.hashCodigo(codigo), 'hex');
+    const armazenado = Buffer.from(hashArmazenado, 'hex');
+
+    return calculado.length === armazenado.length && timingSafeEqual(calculado, armazenado);
+  }
+
+  /** O e-mail carrega apenas o codigo: sem link, nao ha o que clicar num phishing. */
+  private montarEmailCodigo(codigo: string): string {
     return `
-      <p>Ola, ${nome}!</p>
-      <p>Recebemos um pedido para redefinir a senha da sua conta no ViajaJunto.</p>
-      <p><a href="${link}">Clique aqui para criar uma nova senha</a></p>
-      <p>O link expira em ${MINUTOS_VALIDADE_TOKEN} minutos e pode ser usado uma unica vez.</p>
+      <p>Seu codigo para redefinir a senha no ViajaJunto:</p>
+      <p style="font-size:32px;font-weight:bold;letter-spacing:6px;margin:24px 0;">${codigo}</p>
+      <p>O codigo expira em ${MINUTOS_VALIDADE_CODIGO} minutos e vale uma unica vez.</p>
       <p>Se nao foi voce quem pediu, ignore este e-mail: sua senha atual continua valida.</p>
     `;
   }

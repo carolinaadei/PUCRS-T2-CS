@@ -77,19 +77,33 @@ model Usuario {
   @@map("usuario")
 }
 
-/// RF03 - token de uso unico para redefinicao de senha via e-mail (Brevo).
-/// Apenas o hash do token e persistido; o valor em claro so existe no link enviado por e-mail.
+/// RF03 - codigo de uso unico para redefinicao de senha via e-mail (Brevo).
+/// Fluxo em duas etapas: o usuario recebe o codigo de 6 digitos, valida-o em
+/// /auth/verificar-codigo e recebe um token de troca de vida curta; so ele
+/// autoriza /auth/redefinir-senha.
+///
+/// Nem o codigo nem o token de troca sao persistidos em claro. O codigo usa
+/// HMAC (e nao SHA-256 puro): com apenas 10^6 valores possiveis, um digest sem
+/// segredo seria revertido por forca bruta em segundos por quem lesse o banco.
 model TokenRecuperacaoSenha {
-  id        Int       @id @default(autoincrement())
-  usuarioId Int       @map("usuario_id")
-  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
-  expiraEm  DateTime  @map("expira_em")
-  usadoEm   DateTime? @map("usado_em")
-  criadoEm  DateTime  @default(now()) @map("criado_em")
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  codigoHash    String    @map("codigo_hash") @db.VarChar(64)
+  /// Codigos errados acumulam aqui; ao atingir o teto o registro e queimado.
+  /// Defesa independente do IP, ao contrario do rate limit do ThrottlerGuard.
+  tentativas    Int       @default(0)
+  expiraEm      DateTime  @map("expira_em")
+  verificadoEm  DateTime? @map("verificado_em")
+  /// Emitido apos o codigo conferir. 256 bits de entropia, logo pode ser unico.
+  trocaHash     String?   @unique @map("troca_hash") @db.VarChar(64)
+  trocaExpiraEm DateTime? @map("troca_expira_em")
+  usadoEm       DateTime? @map("usado_em")
+  criadoEm      DateTime  @default(now()) @map("criado_em")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  @@index([usuarioId])
+  // Busca quente: o unico codigo pendente de um usuario.
+  @@index([usuarioId, usadoEm])
   @@map("token_recuperacao_senha")
 }
 

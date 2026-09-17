@@ -1,3 +1,7 @@
+# Nome de projeto explicito: sem isto o Compose usa o nome da pasta ('backend'),
+# que colide com outros projetos e faz os dois compartilharem o mesmo volume.
+name: viajajunto
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,7 +12,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viajajunto}
       POSTGRES_DB: ${POSTGRES_DB:-viajajunto}
     ports:
-      - '5432:5432'
+      # Porta do host configuravel: util quando ja ha um Postgres local na 5432.
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

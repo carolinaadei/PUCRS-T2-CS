@@ -15,12 +15,17 @@ export const configuracao = () => ({
 
   seguranca: {
     saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS ?? '10', 10),
+    // RF03 - pepper do HMAC do codigo de 6 digitos. Separado do JWT_SECRET de
+    // proposito: chaves com finalidades distintas nao devem compartilhar valor.
+    segredoRecuperacao: process.env.RECUPERACAO_CODIGO_SECRET ?? '',
   },
 
   integracoes: {
     googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY ?? '',
   },
 
+  // Nao e mais usada pelo RF03 (o e-mail leva apenas o codigo), mas segue
+  // disponivel para outros fluxos que precisem montar links para o front.
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3001',
 
   mail: {

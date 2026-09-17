@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  MinLength,
   validateSync,
 } from 'class-validator';
 
@@ -42,10 +43,17 @@ class VariaveisAmbiente {
   @IsOptional()
   JWT_EXPIRES_IN?: string;
 
-  // RF03 - base do link de redefinicao enviado por e-mail.
+  // O RF03 passou a enviar apenas o codigo, sem link: nao ha mais consumidor
+  // obrigatorio desta variavel, entao exigi-la so quebraria o boot a toa.
   @IsString()
-  @IsNotEmpty({ message: 'FRONTEND_URL e obrigatoria (veja .env.example)' })
-  FRONTEND_URL!: string;
+  @IsOptional()
+  FRONTEND_URL?: string;
+
+  // RF03 - pepper do HMAC do codigo de 6 digitos.
+  @IsString()
+  @IsNotEmpty({ message: 'RECUPERACAO_CODIGO_SECRET e obrigatorio (veja .env.example)' })
+  @MinLength(32, { message: 'RECUPERACAO_CODIGO_SECRET deve ter ao menos 32 caracteres' })
+  RECUPERACAO_CODIGO_SECRET!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'BREVO_API_KEY e obrigatoria (veja .env.example)' })
