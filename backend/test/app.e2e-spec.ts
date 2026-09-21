@@ -54,6 +54,13 @@ describe('AppModule (e2e)', () => {
     return request(app.getHttpServer()).get('/api/viagens').expect(401);
   });
 
+  it('POST /api/viagens exige autenticacao: visitante nao cria viagem (RN01)', () => {
+    return request(app.getHttpServer())
+      .post('/api/viagens')
+      .send({ nome: 'Eurotrip 2027' })
+      .expect(401);
+  });
+
   it('POST /api/auth/registrar rejeita payload invalido (400)', () => {
     return request(app.getHttpServer())
       .post('/api/auth/registrar')
