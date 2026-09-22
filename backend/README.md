@@ -136,6 +136,7 @@ Todas sob o prefixo `/api`.
 | ------ | ---- | --------- | ------ |
 | `POST` | `/auth/registrar` | RF01 | Público |
 | `POST` | `/auth/login` | RF02 | Público |
+| `POST` | `/auth/logout` | RF02 | Autenticado |
 | `GET` | `/usuarios/eu` | — | Autenticado |
 | `PATCH` | `/usuarios/eu` | — | Autenticado |
 | `POST` | `/viagens` | RF04 | Autenticado |

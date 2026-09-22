@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
+import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 
 @Injectable()
 export class AuthService {
@@ -40,7 +41,12 @@ export class AuthService {
     return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
   }
 
-  /** RF02 - autentica e devolve o token de acesso. */
+  /**
+   * RF02 - Autentica o usuario validando e-mail e hash da senha (RNF03).
+   * @param dto Credenciais contendo e-mail e senha.
+   * @throws UnauthorizedException Se o e-mail ou senha forem invalidos.
+   * @returns Token JWT de acesso e dados publicos do usuario.
+   */
   async login(dto: LoginDto): Promise<RespostaAutenticacaoDto> {
     const emailNormalizado = dto.email.trim().toLowerCase();
 
@@ -68,6 +74,19 @@ export class AuthService {
   }
 
   /**
+   * RF02 - Encerra a sessao do usuario (logout).
+   * Em arquitetura JWT stateless, confirma a operacao para descarte do token no cliente.
+   * @param usuarioId Identificador do usuario que solicitou o encerramento.
+   * @returns Mensagem de confirmacao do logout.
+   */
+  async logout(usuarioId: number): Promise<RespostaLogoutDto> {
+    void usuarioId;
+    return {
+      mensagem: 'Logout realizado com sucesso',
+    };
+  }
+
+  /**
    * RF03 - recuperacao de senha por e-mail (prioridade Media).
    * TODO: gerar token de uso unico com expiracao, persistir e disparar o e-mail.
    * Depende da definicao do provedor de envio (fora do escopo do boilerplate).
@@ -77,8 +96,15 @@ export class AuthService {
     return;
   }
 
+  /**
+   * Gera o token de acesso assinado contendo identificador e e-mail no payload JWT.
+   * @param id Identificador do usuario.
+   * @param email E-mail do usuario.
+   * @returns Token JWT assinado.
+   */
   private gerarToken(id: number, email: string): string {
     const payload: PayloadJwt = { sub: id, email };
     return this.jwtService.sign(payload);
   }
 }
+
