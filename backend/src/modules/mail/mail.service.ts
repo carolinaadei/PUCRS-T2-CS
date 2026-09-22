@@ -27,6 +27,14 @@ export class MailService {
     const remetenteEmail = this.configService.get<string>('mail.remetenteEmail')!;
     const remetenteNome = this.configService.get<string>('mail.remetenteNome')!;
 
+    // Em desenvolvimento as chaves do Brevo sao opcionais. Sem elas, dizemos o que
+    // houve em vez de chamar a API e receber um 401 dificil de interpretar.
+    if (!apiKey || !remetenteEmail) {
+      throw new Error(
+        'Brevo nao configurado (BREVO_API_KEY / BREVO_SENDER_EMAIL ausentes): e-mail nao enviado',
+      );
+    }
+
     const resposta = await fetch(URL_API_BREVO, {
       method: 'POST',
       headers: {

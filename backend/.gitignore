@@ -3,5 +3,9 @@ dist/
 coverage/
 .env
 .env.local
+# Copias do .env com credenciais reais (env.txt, env-backup.txt, prod.env, ...).
+# O padrao acima so pega os nomes exatos; estes pegam as copias.
+env*.txt
+*.env
 *.log
 .DS_Store
