@@ -157,9 +157,10 @@ export class AuthService {
       throw codigoInvalido;
     }
 
-    // Registros queimados tem `usadoEm` preenchido, entao ficam de fora da busca.
+    // Codigo de uso unico: registros queimados (`usadoEm`) ou ja verificados
+    // (`verificadoEm`) ficam de fora da busca.
     const registro = await this.prisma.tokenRecuperacaoSenha.findFirst({
-      where: { usuarioId: usuario.id, usadoEm: null },
+      where: { usuarioId: usuario.id, usadoEm: null, verificadoEm: null },
       orderBy: { criadoEm: 'desc' },
     });
 
