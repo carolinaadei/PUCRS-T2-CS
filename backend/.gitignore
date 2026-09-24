@@ -9,3 +9,4 @@ env*.txt
 *.env
 *.log
 .DS_Store
+env.txt
