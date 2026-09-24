@@ -19,7 +19,7 @@ export class CriarCatalogoAtividadeDto {
   @MaxLength(180)
   nome!: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 'Fortaleza do seculo XVI na margem do Tejo' })
   @IsString()
   @IsOptional()
   descricao?: string;
@@ -56,13 +56,16 @@ export class CriarCatalogoAtividadeDto {
   @IsOptional()
   longitude?: number;
 
-  @ApiPropertyOptional({ description: 'Identificador do local na Google Places API' })
+  @ApiPropertyOptional({
+    description: 'Identificador do local na Google Places API',
+    example: 'ChIJ1Ww5Hc80GQ0RXkYcB6Ew3xE',
+  })
   @IsString()
   @IsOptional()
   @MaxLength(255)
   googlePlaceId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 'https://exemplo.com/torre-belem.jpg' })
   @IsUrl()
   @IsOptional()
   @MaxLength(500)

@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
@@ -22,6 +22,22 @@ export class PaginacaoDto {
   get pular(): number {
     return (this.pagina - 1) * this.limite;
   }
+}
+
+/**
+ * Campos do envelope paginado para o Swagger. Cada listagem estende esta
+ * classe declarando `itens` com o tipo concreto, ja que o Swagger nao le
+ * o generico de `RespostaPaginada<T>`.
+ */
+export class PaginaBaseDto {
+  @ApiProperty({ example: 42, description: 'Total de itens em todas as paginas' })
+  total!: number;
+
+  @ApiProperty({ example: 1 })
+  pagina!: number;
+
+  @ApiProperty({ example: 20 })
+  limite!: number;
 }
 
 /** Envelope padrao das respostas paginadas. */

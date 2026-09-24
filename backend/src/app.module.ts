@@ -13,6 +13,7 @@ import { DestinosModule } from './modules/destinos/destinos.module';
 import { HealthModule } from './modules/health/health.module';
 import { MailModule } from './modules/mail/mail.module';
 import { MembrosModule } from './modules/membros/membros.module';
+import { NotificacoesModule } from './modules/notificacoes/notificacoes.module';
 import { OrcamentoModule } from './modules/orcamento/orcamento.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { ViagensModule } from './modules/viagens/viagens.module';
@@ -39,6 +40,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AtividadesModule, // Modulo 4 - Atividades
     OrcamentoModule, // Modulo 5 - Orcamento
     MembrosModule, // Modulo 6 - Colaboracao
+    NotificacoesModule, // Modulo 6 - Colaboracao (RF21, ainda nao implementado)
     AvaliacoesModule, // Modulo 7 - Avaliacao e Descoberta
     HealthModule,
   ],
