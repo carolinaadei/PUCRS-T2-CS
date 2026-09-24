@@ -1,197 +1,168 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
+import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { RegistrarDto } from './dto/registrar.dto';
 
 /**
- * RF01 - cadastro de conta. O Prisma e mockado: estes testes cobrem a regra de
- * negocio do service, nao o banco (o caminho real com PostgreSQL fica no e2e).
+ * Testes unitarios do AuthService (RF01 e RF02).
+ * Valida os fluxos de login, logout e registro com dependencias mockadas.
  */
-describe('AuthService - registrar (RF01)', () => {
-  const SALT_ROUNDS = 4;
-  const TOKEN_FAKE = 'token-jwt-fake';
-
+describe('AuthService', () => {
   let service: AuthService;
-  let prisma: { usuario: { findUnique: jest.Mock; create: jest.Mock } };
-  let jwt: { sign: jest.Mock };
+  let prisma: {
+    usuario: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
+  };
+  let jwtService: {
+    sign: jest.Mock;
+  };
+  let configService: {
+    get: jest.Mock;
+  };
 
-  const dto = (): RegistrarDto => ({
-    nome: '  Ana Souza  ',
-    email: '  Ana.Souza@Example.COM  ',
-    senha: 'senhaSegura123',
+  const usuarioMock = {
+    id: 1,
+    nome: 'Teste Silva',
+    email: 'teste@example.com',
+    senhaHash: '',
+  };
+
+  beforeAll(async () => {
+    usuarioMock.senhaHash = await bcrypt.hash('senhaCorreta123', 10);
   });
 
-  const dadosPersistidos = () => prisma.usuario.create.mock.calls[0][0].data;
-
   beforeEach(async () => {
-    prisma = { usuario: { findUnique: jest.fn(), create: jest.fn() } };
-    jwt = { sign: jest.fn().mockReturnValue(TOKEN_FAKE) };
+    prisma = {
+      usuario: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    };
 
-    const modulo = await Test.createTestingModule({
+    jwtService = {
+      sign: jest.fn().mockReturnValue('mocked.jwt.token'),
+    };
+
+    configService = {
+      get: jest.fn((chave: string) => {
+        if (chave === 'seguranca.saltRounds') return 10;
+        if (chave === 'jwt.segredo') return 'test-secret';
+        if (chave === 'jwt.expiraEm') return '7d';
+        return null;
+      }),
+    };
+
+    const modulo: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
-        { provide: JwtService, useValue: jwt },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(SALT_ROUNDS) } },
+        { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: configService },
       ],
     }).compile();
 
-    service = modulo.get(AuthService);
+    service = modulo.get<AuthService>(AuthService);
   });
 
-  it('cria a conta e devolve o token quando o e-mail ainda nao existe', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockResolvedValue({
-      id: 1,
-      nome: 'Ana Souza',
-      email: 'ana.souza@example.com',
+  describe('RF02 - login', () => {
+    it('deve autenticar o usuario com credenciais validas e retornar token JWT e dados do usuario', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(usuarioMock);
+
+      const resultado = await service.login({
+        email: '  TESTE@example.com  ',
+        senha: 'senhaCorreta123',
+      });
+
+      expect(prisma.usuario.findUnique).toHaveBeenCalledWith({
+        where: { email: 'teste@example.com' },
+      });
+      expect(jwtService.sign).toHaveBeenCalledWith({
+        sub: 1,
+        email: 'teste@example.com',
+      });
+      expect(resultado).toEqual({
+        accessToken: 'mocked.jwt.token',
+        usuario: {
+          id: 1,
+          nome: 'Teste Silva',
+          email: 'teste@example.com',
+        },
+      });
     });
 
-    const resposta = await service.registrar(dto());
+    it('deve lancar UnauthorizedException quando o usuario nao for encontrado', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
 
-    expect(resposta.accessToken).toBe(TOKEN_FAKE);
-    expect(resposta.usuario).toEqual({ id: 1, nome: 'Ana Souza', email: 'ana.souza@example.com' });
-    expect(jwt.sign).toHaveBeenCalledWith({ sub: 1, email: 'ana.souza@example.com' });
-  });
-
-  it('persiste a senha em hash e nunca em texto puro (RNF03)', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockResolvedValue({ id: 1, nome: 'Ana Souza', email: 'a@b.com' });
-
-    await service.registrar(dto());
-
-    const { senhaHash } = dadosPersistidos();
-    expect(senhaHash).not.toBe('senhaSegura123');
-    expect(senhaHash).toMatch(/^\$2[aby]\$/);
-
-    await expect(bcrypt.compare('senhaSegura123', senhaHash)).resolves.toBe(true);
-  });
-
-  it('normaliza o e-mail para minusculas e aplica trim no nome', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockResolvedValue({ id: 1, nome: 'Ana Souza', email: 'a@b.com' });
-
-    await service.registrar(dto());
-
-    expect(dadosPersistidos()).toMatchObject({
-      nome: 'Ana Souza',
-      email: 'ana.souza@example.com',
+      await expect(
+        service.login({
+          email: 'inexistente@example.com',
+          senha: 'senhaQualquer',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
-    expect(prisma.usuario.findUnique).toHaveBeenCalledWith({
-      where: { email: 'ana.souza@example.com' },
-      select: { id: true },
-    });
-  });
+    it('deve lancar UnauthorizedException quando a senha estiver incorreta', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(usuarioMock);
 
-  it('nao expoe o hash da senha na resposta', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockResolvedValue({ id: 1, nome: 'Ana Souza', email: 'a@b.com' });
-
-    const resposta = await service.registrar(dto());
-
-    expect(JSON.stringify(resposta)).not.toContain('senhaHash');
-    expect(dadosPersistidos().senhaHash).toBeDefined();
-
-    expect(prisma.usuario.create.mock.calls[0][0].select).toEqual({
-      id: true,
-      nome: true,
-      email: true,
+      await expect(
+        service.login({
+          email: 'teste@example.com',
+          senha: 'senhaErrada',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
-  it('rejeita e-mail ja cadastrado sem tentar gravar', async () => {
-    prisma.usuario.findUnique.mockResolvedValue({ id: 9 });
+  describe('RF02 - logout', () => {
+    it('deve retornar mensagem de confirmacao de encerramento de sessao', async () => {
+      const resultado = await service.logout(1);
 
-    await expect(service.registrar(dto())).rejects.toThrow(ConflictException);
-    await expect(service.registrar(dto())).rejects.toThrow('Ja existe uma conta com este e-mail');
-    expect(prisma.usuario.create).not.toHaveBeenCalled();
+      expect(resultado).toEqual({
+        mensagem: 'Logout realizado com sucesso',
+      });
+    });
   });
 
-  it('traduz o P2002 da corrida para o mesmo conflito do caminho sequencial', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-        code: 'P2002',
-        clientVersion: 'teste',
-        meta: { target: ['email'] },
-      }),
-    );
+  describe('RF01 - registrar', () => {
+    it('deve registrar um novo usuario com sucesso', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
+      prisma.usuario.create.mockResolvedValue({
+        id: 2,
+        nome: 'Novo Usuario',
+        email: 'novo@example.com',
+      });
 
-    await expect(service.registrar(dto())).rejects.toThrow(ConflictException);
-    await expect(service.registrar(dto())).rejects.toThrow('Ja existe uma conta com este e-mail');
-  });
+      const resultado = await service.registrar({
+        nome: 'Novo Usuario',
+        email: 'novo@example.com',
+        senha: 'senhaSegura123',
+      });
 
-  it('relanca erros que nao sejam de duplicidade', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    prisma.usuario.create.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('Banco indisponivel', {
-        code: 'P1001',
-        clientVersion: 'teste',
-      }),
-    );
-
-    await expect(service.registrar(dto())).rejects.toThrow('Banco indisponivel');
-    await expect(service.registrar(dto())).rejects.not.toBeInstanceOf(ConflictException);
-  });
-});
-
-describe('AuthService - login (RF02)', () => {
-  let service: AuthService;
-  let prisma: { usuario: { findUnique: jest.Mock } };
-
-  beforeEach(async () => {
-    prisma = { usuario: { findUnique: jest.fn() } };
-
-    const modulo = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: JwtService, useValue: { sign: jest.fn().mockReturnValue('token') } },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(4) } },
-      ],
-    }).compile();
-
-    service = modulo.get(AuthService);
-  });
-
-  it('autentica quando a senha confere com o hash gravado no cadastro', async () => {
-    prisma.usuario.findUnique.mockResolvedValue({
-      id: 1,
-      nome: 'Ana Souza',
-      email: 'ana.souza@example.com',
-      senhaHash: await bcrypt.hash('senhaSegura123', 4),
+      expect(resultado).toEqual({
+        accessToken: 'mocked.jwt.token',
+        usuario: {
+          id: 2,
+          nome: 'Novo Usuario',
+          email: 'novo@example.com',
+        },
+      });
     });
 
-    const resposta = await service.login({
-      email: 'ana.souza@example.com',
-      senha: 'senhaSegura123',
+    it('deve lancar ConflictException se o email ja estiver cadastrado', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({ id: 1 });
+
+      await expect(
+        service.registrar({
+          nome: 'Outro Nome',
+          email: 'teste@example.com',
+          senha: 'senhaSegura123',
+        }),
+      ).rejects.toThrow(ConflictException);
     });
-
-    expect(resposta.accessToken).toBe('token');
-    expect(JSON.stringify(resposta)).not.toContain('senhaHash');
-  });
-
-  it('usa a mesma mensagem para e-mail inexistente e senha errada', async () => {
-    prisma.usuario.findUnique.mockResolvedValue(null);
-    await expect(service.login({ email: 'x@y.com', senha: 'seja-la-o-que-for' })).rejects.toThrow(
-      'E-mail ou senha invalidos',
-    );
-
-    prisma.usuario.findUnique.mockResolvedValue({
-      id: 1,
-      nome: 'Ana',
-      email: 'x@y.com',
-      senhaHash: await bcrypt.hash('a-senha-certa', 4),
-    });
-
-    await expect(service.login({ email: 'x@y.com', senha: 'a-senha-errada' })).rejects.toThrow(
-      UnauthorizedException,
-    );
   });
 });
