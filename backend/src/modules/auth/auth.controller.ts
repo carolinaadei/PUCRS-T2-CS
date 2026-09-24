@@ -1,28 +1,13 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  NotImplementedException,
-  Post,
-} from '@nestjs/common';
-import {
-  ApiCreatedResponse,
-  ApiNoContentResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Publico } from '../../common/decorators/publico.decorator';
+import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
 import {
   ApiAutenticado,
   ApiErro,
   ApiErroValidacao,
-  ApiNaoImplementado,
 } from '../../common/swagger/api-respostas.decorator';
-import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
 import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -30,6 +15,7 @@ import { RecuperarSenhaDto } from './dto/recuperar-senha.dto';
 import { RedefinirSenhaDto } from './dto/redefinir-senha.dto';
 import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
+import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 import { RespostaRecuperacaoDto } from './dto/resposta-recuperacao.dto';
 import { RespostaRedefinicaoDto } from './dto/resposta-redefinicao.dto';
 import { RespostaVerificacaoDto } from './dto/resposta-verificacao.dto';
@@ -37,7 +23,6 @@ import { VerificarCodigoDto } from './dto/verificar-codigo.dto';
 
 const MENSAGEM_GENERICA =
   'Se houver uma conta com este e-mail, enviaremos um codigo de verificacao.';
-import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 
 const MUITAS_TENTATIVAS = 'Muitas tentativas; tente mais tarde';
 
@@ -62,10 +47,6 @@ export class AuthController {
   @ApiCreatedResponse({ type: RespostaAutenticacaoDto })
   @ApiErroValidacao('Informe um e-mail valido', 'A senha deve ter no minimo 8 caracteres')
   @ApiErro(409, 'E-mail ja cadastrado', 'Ja existe uma conta com este e-mail')
-  @ApiOperation({ summary: 'RF01 - Cadastrar conta' })
-  @ApiResponse({ status: 201, type: RespostaAutenticacaoDto })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 409, description: 'E-mail ja cadastrado' })
   registrar(@Body() dto: RegistrarDto): Promise<RespostaAutenticacaoDto> {
     return this.authService.registrar(dto);
   }
@@ -82,30 +63,28 @@ export class AuthController {
     description: 'Devolve o JWT a enviar no header `Authorization: Bearer <token>`.',
   })
   @ApiOkResponse({ type: RespostaAutenticacaoDto })
-  @ApiErroValidacao('email must be an email')
+  @ApiErroValidacao('Formato de e-mail invalido', 'A senha e obrigatoria')
   @ApiErro(401, 'Credenciais invalidas', 'E-mail ou senha invalidos')
-  @ApiOperation({ summary: 'RF02 - Autenticar usuario' })
-  @ApiResponse({ status: 200, type: RespostaAutenticacaoDto })
-  @ApiResponse({ status: 400, description: 'Dados invalidos' })
-  @ApiResponse({ status: 401, description: 'Credenciais invalidas' })
   login(@Body() dto: LoginDto): Promise<RespostaAutenticacaoDto> {
     return this.authService.login(dto);
   }
 
+  /**
+   * RF02 - Encerra as sessoes do usuario autenticado (logout).
+   * @param usuario Usuario resolvido pela JwtStrategy a partir do token.
+   */
   @Post('logout')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiAutenticado()
   @ApiOperation({
-    summary: 'RF02 - Encerrar sessoes (nao implementado)',
+    summary: 'RF02 - Encerrar sessoes',
     description:
-      'Invalida todos os JWTs ja emitidos para o usuario. Ate existir, o logout e ' +
-      'feito no cliente, descartando o token.',
+      'Invalida todos os JWTs ja emitidos para o usuario: os tokens anteriores ' +
+      'passam a receber 401, inclusive em outros dispositivos.',
   })
-  @ApiNoContentResponse({ description: 'Sessoes encerradas' })
-  @ApiNaoImplementado()
-  logout(): never {
-    // TODO (RF02): incrementar `versaoSessao` do usuario, como na redefinicao de senha.
-    throw new NotImplementedException('Logout ainda nao implementado');
+  @ApiOkResponse({ type: RespostaLogoutDto })
+  logout(@UsuarioAtual() usuario: UsuarioAutenticado): Promise<RespostaLogoutDto> {
+    return this.authService.logout(usuario.id);
   }
 
   @Publico()
@@ -170,18 +149,5 @@ export class AuthController {
   async redefinirSenha(@Body() dto: RedefinirSenhaDto): Promise<RespostaRedefinicaoDto> {
     await this.authService.redefinirSenha(dto.tokenTroca, dto.novaSenha, dto.confirmarNovaSenha);
     return { mensagem: 'Senha redefinida com sucesso' };
-  /**
-   * RF02 - Encerra a sessao do usuario autenticado (logout).
-   * @param usuario Dados do usuario autenticado extraidos do token JWT.
-   */
-  @Post('logout')
-  @HttpCode(HttpStatus.OK)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'RF02 - Encerrar sessao do usuario (logout)' })
-  @ApiResponse({ status: 200, type: RespostaLogoutDto })
-  @ApiResponse({ status: 401, description: 'Token nao fornecido ou invalido' })
-  logout(@UsuarioAtual() usuario: UsuarioAutenticado): Promise<RespostaLogoutDto> {
-    return this.authService.logout(usuario.id);
   }
 }
-

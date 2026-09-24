@@ -58,6 +58,7 @@ O seed cria dois usuários (senha `senha12345`) e a viagem de demonstração de 
 | `npm run lint` | ESLint + Prettier com correção automática |
 | `npm test` | Testes unitários |
 | `npm run test:e2e` | Teste de integração do app (não exige banco) |
+| `npm run test:integracao` | Percorre todos os endpoints contra um PostgreSQL real (exige `DATABASE_URL_TESTE`) |
 | `npm run db:up` / `npm run db:down` | Sobe/derruba o PostgreSQL do docker compose |
 | `npm run prisma:migrate` | Cria e aplica uma migration |
 | `npm run prisma:studio` | Abre o Prisma Studio para inspecionar os dados |

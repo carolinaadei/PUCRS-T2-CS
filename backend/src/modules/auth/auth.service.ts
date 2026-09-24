@@ -16,6 +16,7 @@ import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
+import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 import { RespostaVerificacaoDto } from './dto/resposta-verificacao.dto';
 
 /** RF03 - janela de validade do codigo de 6 digitos enviado por e-mail. */
@@ -30,7 +31,6 @@ const MINUTOS_VALIDADE_TROCA = 10;
  * escapar do ThrottlerGuard.
  */
 const MAX_TENTATIVAS = 5;
-import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 
 @Injectable()
 export class AuthService {
@@ -62,23 +62,19 @@ export class AuthService {
     const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
     const senhaHash = await bcrypt.hash(dto.senha, saltRounds);
 
-    const usuario = await this.prisma.usuario.create({
-      data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
-      select: { id: true, nome: true, email: true, versaoSessao: true },
-    });
-
-    return {
-      accessToken: this.gerarToken(usuario),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
-    };
     try {
       const usuario = await this.prisma.usuario.create({
         data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
-        select: { id: true, nome: true, email: true },
+        select: { id: true, nome: true, email: true, versaoSessao: true },
       });
 
-      return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
+      return {
+        accessToken: this.gerarToken(usuario),
+        usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+      };
     } catch (erro) {
+      // A checagem acima resolve o caso comum; o indice unico resolve a corrida
+      // entre dois cadastros simultaneos com o mesmo e-mail.
       if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
         throw new ConflictException('Ja existe uma conta com este e-mail');
       }
@@ -123,6 +119,26 @@ export class AuthService {
   }
 
   /**
+   * RF02 - encerra as sessoes do usuario, invalidando os JWTs ja emitidos.
+   * Incrementar `versaoSessao` faz a JwtStrategy recusar qualquer token assinado
+   * antes desta chamada, inclusive um que tenha sido roubado. Sem isso o logout
+   * seria apenas uma mensagem: o token continuaria valido ate expirar.
+   */
+  async logout(usuarioId: number): Promise<RespostaLogoutDto> {
+    await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data: { versaoSessao: { increment: 1 } },
+    });
+
+    return { mensagem: 'Logout realizado com sucesso' };
+  }
+
+  /**
+   * RF03 - etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
+   * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma, e
+   * chega no mesmo tempo, porque o trabalho roda sem ser esperado. Se fosse
+   * esperado, o e-mail cadastrado demoraria centenas de ms a mais (gravacao no
+   * banco + chamada ao Brevo) e o tempo de resposta entregaria quem tem conta.
    */
   solicitarRecuperacaoSenha(email: string): void {
     void this.enviarCodigoRecuperacao(email).catch((erro: unknown) =>
@@ -358,20 +374,18 @@ export class AuthService {
     return this.hashDescartavel;
   }
 
+  /**
+   * Gera o token de acesso assinado. O `ver` no payload prende o token a versao
+   * de sessao vigente: logout (RF02) e redefinicao de senha (RF03) incrementam a
+   * versao e derrubam tudo que foi assinado antes.
+   */
   private gerarToken(usuario: { id: number; email: string; versaoSessao: number }): string {
     const payload: PayloadJwt = {
       sub: usuario.id,
       email: usuario.email,
       ver: usuario.versaoSessao,
     };
-   * Gera o token de acesso assinado contendo identificador e e-mail no payload JWT.
-   * @param id Identificador do usuario.
-   * @param email E-mail do usuario.
-   * @returns Token JWT assinado.
-   */
-  private gerarToken(id: number, email: string): string {
-    const payload: PayloadJwt = { sub: id, email };
+
     return this.jwtService.sign(payload);
   }
 }
-

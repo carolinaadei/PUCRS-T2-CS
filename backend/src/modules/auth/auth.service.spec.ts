@@ -1,14 +1,13 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
-import { PrismaService } from '../../prisma/prisma.service';
-import { AuthService } from './auth.service';
-import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { Test } from '@nestjs/testing';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuthService } from './auth.service';
@@ -387,6 +386,20 @@ describe('AuthService - login e recuperacao de senha (RF02/RF03)', () => {
 
     expect(resultados.filter((resultado) => resultado.status === 'fulfilled')).toHaveLength(1);
     expect(usuario.versaoSessao).toBe(1);
+  });
+
+  it('logout - incrementa a versao de sessao e derruba os tokens ja emitidos', async () => {
+    expect(usuario.versaoSessao).toBe(0);
+
+    await expect(service.logout(USUARIO.id)).resolves.toEqual({
+      mensagem: 'Logout realizado com sucesso',
+    });
+
+    // A JwtStrategy compara `payload.ver` com este campo: qualquer token
+    // assinado antes daqui deixa de valer.
+    expect(usuario.versaoSessao).toBe(1);
+  });
+});
 
 /**
  * Testes unitarios do AuthService (RF01 e RF02).
@@ -398,6 +411,7 @@ describe('AuthService', () => {
     usuario: {
       findUnique: jest.Mock;
       create: jest.Mock;
+      update: jest.Mock;
     };
   };
   let jwtService: {
@@ -412,6 +426,7 @@ describe('AuthService', () => {
     nome: 'Teste Silva',
     email: 'teste@example.com',
     senhaHash: '',
+    versaoSessao: 0,
   };
 
   beforeAll(async () => {
@@ -423,6 +438,7 @@ describe('AuthService', () => {
       usuario: {
         findUnique: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -445,6 +461,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
+        { provide: MailService, useValue: { enviarEmail: jest.fn() } },
       ],
     }).compile();
 
@@ -466,6 +483,7 @@ describe('AuthService', () => {
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: 1,
         email: 'teste@example.com',
+        ver: 0,
       });
       expect(resultado).toEqual({
         accessToken: 'mocked.jwt.token',
@@ -501,9 +519,15 @@ describe('AuthService', () => {
   });
 
   describe('RF02 - logout', () => {
-    it('deve retornar mensagem de confirmacao de encerramento de sessao', async () => {
+    it('deve incrementar a versao de sessao para invalidar os tokens ja emitidos', async () => {
+      prisma.usuario.update.mockResolvedValue({ ...usuarioMock, versaoSessao: 1 });
+
       const resultado = await service.logout(1);
 
+      expect(prisma.usuario.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { versaoSessao: { increment: 1 } },
+      });
       expect(resultado).toEqual({
         mensagem: 'Logout realizado com sucesso',
       });
@@ -517,6 +541,7 @@ describe('AuthService', () => {
         id: 2,
         nome: 'Novo Usuario',
         email: 'novo@example.com',
+        versaoSessao: 0,
       });
 
       const resultado = await service.registrar({
