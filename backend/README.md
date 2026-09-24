@@ -110,9 +110,9 @@ entrada), `*.service.ts` (regra de negócio) e `dto/` (contratos de entrada e sa
 
 ## Recuperação de senha (RF03)
 
-Código de 6 dígitos enviado por e-mail via Brevo, em três etapas. Exige quatro
-variáveis de ambiente sem as quais a API não sobe — a configuração, os limites
-e os erros comuns estão em **[docs/recuperacao-de-senha.md](docs/recuperacao-de-senha.md)**.
+Código de 6 dígitos enviado por e-mail via Brevo, em três etapas. Em produção, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` e
+`RECUPERACAO_CODIGO_SECRET` são obrigatórias; em desenvolvimento, o envio pode
+ficar desconfigurado. A configuração, os limites e os erros comuns estão em **[docs/recuperacao-de-senha.md](docs/recuperacao-de-senha.md)**.
 
 ## Controle de acesso
 
