@@ -31,6 +31,9 @@ npm install
 
 # 2. Variáveis de ambiente (no Windows/PowerShell use: copy .env.example .env)
 cp .env.example .env
+# O RF03 (recuperação de senha) exige as chaves do Brevo e um
+# RECUPERACAO_CODIGO_SECRET. Em produção (NODE_ENV=production) a API não sobe
+# sem eles; em desenvolvimento a API sobe normalmente. Veja docs/recuperacao-de-senha.md
 
 # 3. Banco de dados
 npm run db:up                 # sobe o PostgreSQL via docker compose
@@ -71,8 +74,9 @@ arquivo do engine aberto. Pare o `npm run start:dev` antes, ou rode
 `.env.example`. O `prisma.config.ts` carrega o `.env` via `import 'dotenv/config'`:
 com um arquivo de config, a CLI do Prisma deixa de carregar o `.env` sozinha.
 
-**Porta 5432 já em uso** — outro PostgreSQL local está ativo. Pare o serviço ou
-mude a porta publicada no `docker-compose.yml` e no `DATABASE_URL`.
+**Porta 5432 já em uso** — outro PostgreSQL local está ativo. Defina
+`POSTGRES_PORT` no `.env` (ex.: `5433`) e reflita a mesma porta na
+`DATABASE_URL`; o `docker-compose.yml` publica a porta que estiver ali.
 
 ## Organização do código
 
@@ -103,6 +107,12 @@ backend/
 
 Cada módulo segue o padrão do NestJS: `*.controller.ts` (rotas e validação de
 entrada), `*.service.ts` (regra de negócio) e `dto/` (contratos de entrada e saída).
+
+## Recuperação de senha (RF03)
+
+Código de 6 dígitos enviado por e-mail via Brevo, em três etapas. Em produção, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` e
+`RECUPERACAO_CODIGO_SECRET` são obrigatórias; em desenvolvimento, o envio pode
+ficar desconfigurado. A configuração, os limites e os erros comuns estão em **[docs/recuperacao-de-senha.md](docs/recuperacao-de-senha.md)**.
 
 ## Controle de acesso
 
@@ -136,6 +146,10 @@ Todas sob o prefixo `/api`.
 | ------ | ---- | --------- | ------ |
 | `POST` | `/auth/registrar` | RF01 | Público |
 | `POST` | `/auth/login` | RF02 | Público |
+| `POST` | `/auth/logout` | RF02 | Autenticado |
+| `POST` | `/auth/recuperar-senha` | RF03 | Público |
+| `POST` | `/auth/verificar-codigo` | RF03 | Público |
+| `POST` | `/auth/redefinir-senha` | RF03 | Público |
 | `GET` | `/usuarios/eu` | — | Autenticado |
 | `PATCH` | `/usuarios/eu` | — | Autenticado |
 | `POST` | `/viagens` | RF04 | Autenticado |
@@ -193,7 +207,6 @@ Registradas aqui porque vão além do que a documentação especifica:
 
 Marcadas como `TODO` no código, aguardando decisão da equipe:
 
-- **RF03** — recuperação de senha por e-mail: depende da escolha do provedor de envio.
 - **RF11** — endpoint dos países já visitados, para o mapa (jsVectormap).
 - **RF21** — notificações in-app para colaboradores.
 - **Google Places API** — integração do Serviço de Locais/Atividades (Seção 2 da arquitetura).

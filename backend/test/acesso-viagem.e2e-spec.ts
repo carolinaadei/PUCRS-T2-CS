@@ -1,8 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { PermissaoMembro } from '@prisma/client';
 import request from 'supertest';
+import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -42,8 +43,8 @@ describe('AcessoViagemGuard (e2e)', () => {
   }
 
   function tokenDe(usuario: { id: number; email: string }) {
-    prismaMock.usuario.findUnique.mockResolvedValue(usuario);
-    return jwtService.sign({ sub: usuario.id, email: usuario.email });
+    prismaMock.usuario.findUnique.mockResolvedValue({ ...usuario, versaoSessao: 0 });
+    return jwtService.sign({ sub: usuario.id, email: usuario.email, ver: 0 });
   }
 
   beforeAll(async () => {
@@ -54,9 +55,7 @@ describe('AcessoViagemGuard (e2e)', () => {
 
     app = modulo.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
+    app.useGlobalPipes(criarPipeValidacao());
 
     jwtService = modulo.get(JwtService);
     await app.init();
@@ -107,6 +106,18 @@ describe('AcessoViagemGuard (e2e)', () => {
       .delete('/api/viagens/DEMO2027')
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
+  });
+
+  it('RF03 - token emitido antes de redefinir a senha deixa de valer (401)', async () => {
+    const token = tokenDe(CRIADOR);
+    comViagemPadrao(CRIADOR.id);
+    // A redefinicao incrementa a versao de sessao; o token ainda carrega ver: 0.
+    prismaMock.usuario.findUnique.mockResolvedValue({ ...CRIADOR, versaoSessao: 1 });
+
+    await request(app.getHttpServer())
+      .get('/api/viagens/DEMO2027')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(401);
   });
 
   it('responde 404 quando o codigo da viagem nao existe', async () => {

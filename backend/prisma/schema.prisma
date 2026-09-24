@@ -63,17 +63,51 @@ enum StatusAtividade {
 
 /// RF01, RF02 - contas de usuario. A senha e sempre persistida com hash (RNF03).
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nome      String   @db.VarChar(120)
-  email     String   @unique @db.VarChar(180)
-  senhaHash String   @map("senha_hash") @db.VarChar(255)
-  criadoEm  DateTime @default(now()) @map("criado_em")
+  id           Int      @id @default(autoincrement())
+  nome         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(180)
+  senhaHash    String   @map("senha_hash") @db.VarChar(255)
+  /// Vai no JWT (`ver`) e e conferida a cada requisicao pela JwtStrategy.
+  /// Incrementar invalida todos os tokens ja emitidos (ex.: apos redefinir a senha).
+  versaoSessao Int      @default(0) @map("versao_sessao")
+  criadoEm     DateTime @default(now()) @map("criado_em")
 
   viagensCriadas Viagem[]        @relation("ViagensCriadas")
   membroEm       MembroViagem[]
   avaliacoes     Avaliacao[]
+  tokensRecuperacaoSenha TokenRecuperacaoSenha[]
 
   @@map("usuario")
+}
+
+/// RF03 - codigo de uso unico para redefinicao de senha via e-mail (Brevo).
+/// Fluxo em duas etapas: o usuario recebe o codigo de 6 digitos, valida-o em
+/// /auth/verificar-codigo e recebe um token de troca de vida curta; so ele
+/// autoriza /auth/redefinir-senha.
+///
+/// Nem o codigo nem o token de troca sao persistidos em claro. O codigo usa
+/// HMAC (e nao SHA-256 puro): com apenas 10^6 valores possiveis, um digest sem
+/// segredo seria revertido por forca bruta em segundos por quem lesse o banco.
+model TokenRecuperacaoSenha {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  codigoHash    String    @map("codigo_hash") @db.VarChar(64)
+  /// Codigos errados acumulam aqui; ao atingir o teto o registro e queimado.
+  /// Defesa independente do IP, ao contrario do rate limit do ThrottlerGuard.
+  tentativas    Int       @default(0)
+  expiraEm      DateTime  @map("expira_em")
+  verificadoEm  DateTime? @map("verificado_em")
+  /// Emitido apos o codigo conferir. 256 bits de entropia, logo pode ser unico.
+  trocaHash     String?   @unique @map("troca_hash") @db.VarChar(64)
+  trocaExpiraEm DateTime? @map("troca_expira_em")
+  usadoEm       DateTime? @map("usado_em")
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Busca quente: o unico codigo pendente de um usuario.
+  @@index([usuarioId, usadoEm])
+  @@map("token_recuperacao_senha")
 }
 
 /// RF04 a RF07 - a viagem e a raiz de agregacao do planejamento.
