@@ -1,0 +1,27 @@
+# Nome explicito: sem ele o Compose usaria o nome da pasta ('backend') e
+# dividiria o volume com qualquer outro projeto que tenha uma pasta 'backend'.
+# Copias e worktrees deste repositorio compartilham o banco por padrao; para
+# isola-las, defina COMPOSE_PROJECT_NAME no .env (veja .env.example).
+name: ${COMPOSE_PROJECT_NAME:-viajajunto}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-viajajunto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viajajunto}
+      POSTGRES_DB: ${POSTGRES_DB:-viajajunto}
+    ports:
+      # Porta do host configuravel: util quando ja ha um Postgres local na 5432.
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-viajajunto}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
