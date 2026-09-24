@@ -12,7 +12,10 @@ export class UsuarioResumoDto {
 }
 
 export class RespostaAutenticacaoDto {
-  @ApiProperty({ description: 'Token JWT a ser enviado em Authorization: Bearer <token>' })
+  @ApiProperty({
+    description: 'Token JWT a ser enviado em Authorization: Bearer <token>',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsImVtYWlsIjoiYW5hIiwidmVyIjowfQ.x',
+  })
   accessToken!: string;
 
   @ApiProperty({ type: UsuarioResumoDto })

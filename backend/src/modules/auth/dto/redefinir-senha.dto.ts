@@ -3,7 +3,10 @@ import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 
 /** RF03 - etapa 3: troca efetiva da senha, autorizada pelo token de troca. */
 export class RedefinirSenhaDto {
-  @ApiProperty({ description: 'Token devolvido por POST /auth/verificar-codigo' })
+  @ApiProperty({
+    description: 'Token devolvido por POST /auth/verificar-codigo',
+    example: 'vnr3z0b0JYpWs33QFwB0GEL0dsr5rwla7squkm6PYeU',
+  })
   @IsString()
   @IsNotEmpty()
   tokenTroca!: string;
