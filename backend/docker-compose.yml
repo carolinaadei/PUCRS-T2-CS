@@ -1,4 +1,7 @@
-# Nome de projeto parametrizavel para evitar colisoes entre copias/worktrees.
+# Nome explicito: sem ele o Compose usaria o nome da pasta ('backend') e
+# dividiria o volume com qualquer outro projeto que tenha uma pasta 'backend'.
+# Copias e worktrees deste repositorio compartilham o banco por padrao; para
+# isola-las, defina COMPOSE_PROJECT_NAME no .env (veja .env.example).
 name: ${COMPOSE_PROJECT_NAME:-viajajunto}
 
 services:

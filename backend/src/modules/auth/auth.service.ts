@@ -34,6 +34,9 @@ const MAX_TENTATIVAS = 5;
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  /** Ver `obterHashDescartavel`. */
+  private hashDescartavel?: Promise<string>;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -59,10 +62,13 @@ export class AuthService {
 
     const usuario = await this.prisma.usuario.create({
       data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
-      select: { id: true, nome: true, email: true },
+      select: { id: true, nome: true, email: true, versaoSessao: true },
     });
 
-    return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
+    return {
+      accessToken: this.gerarToken(usuario),
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+    };
   }
 
   /** RF02 - autentica e devolve o token de acesso. */
@@ -77,6 +83,9 @@ export class AuthService {
     const credenciaisInvalidas = new UnauthorizedException('E-mail ou senha invalidos');
 
     if (!usuario) {
+      // Roda o bcrypt mesmo assim: sem ele, o e-mail desconhecido responderia
+      // dezenas de ms mais rapido, e o tempo entregaria quem tem conta.
+      await bcrypt.compare(dto.senha, await this.obterHashDescartavel());
       throw credenciaisInvalidas;
     }
 
@@ -87,16 +96,25 @@ export class AuthService {
     }
 
     return {
-      accessToken: this.gerarToken(usuario.id, usuario.email),
+      accessToken: this.gerarToken(usuario),
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
     };
   }
 
   /**
    * RF03 - etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
-   * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma.
+   * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma, e
+   * chega no mesmo tempo, porque o trabalho roda sem ser esperado. Se fosse
+   * esperado, o e-mail cadastrado demoraria centenas de ms a mais (gravacao no
+   * banco + chamada ao Brevo) e o tempo de resposta entregaria quem tem conta.
    */
-  async solicitarRecuperacaoSenha(email: string): Promise<void> {
+  solicitarRecuperacaoSenha(email: string): void {
+    void this.enviarCodigoRecuperacao(email).catch((erro: unknown) =>
+      this.logger.error(`Falha ao processar recuperacao de senha: ${String(erro)}`),
+    );
+  }
+
+  private async enviarCodigoRecuperacao(email: string): Promise<void> {
     const emailNormalizado = email.trim().toLowerCase();
 
     const usuario = await this.prisma.usuario.findUnique({
@@ -168,16 +186,35 @@ export class AuthService {
       throw codigoInvalido;
     }
 
-    if (!this.codigoConfere(codigo, registro.codigoHash)) {
-      const tentativas = registro.tentativas + 1;
+    // Reserva a tentativa ANTES de conferir o codigo, num UPDATE condicional: o
+    // banco serializa o incremento, entao no maximo MAX_TENTATIVAS requisicoes
+    // chegam a comparacao, mesmo disparadas em paralelo. Ler o contador, somar
+    // em memoria e gravar depois deixaria uma rajada inteira gastar uma so.
+    const reserva = await this.prisma.tokenRecuperacaoSenha.updateMany({
+      where: {
+        id: registro.id,
+        usadoEm: null,
+        verificadoEm: null,
+        tentativas: { lt: MAX_TENTATIVAS },
+      },
+      data: { tentativas: { increment: 1 } },
+    });
 
-      await this.prisma.tokenRecuperacaoSenha.update({
-        where: { id: registro.id },
-        data: {
-          tentativas,
-          // Esgotou o teto: queima o codigo em vez de deixar continuar adivinhando.
-          ...(tentativas >= MAX_TENTATIVAS ? { usadoEm: new Date() } : {}),
+    if (reserva.count === 0) {
+      throw codigoInvalido;
+    }
+
+    if (!this.codigoConfere(codigo, registro.codigoHash)) {
+      // Esgotou o teto: queima o codigo em vez de deixar continuar adivinhando.
+      // `verificadoEm: null` preserva uma troca que outra requisicao ja liberou.
+      await this.prisma.tokenRecuperacaoSenha.updateMany({
+        where: {
+          id: registro.id,
+          usadoEm: null,
+          verificadoEm: null,
+          tentativas: { gte: MAX_TENTATIVAS },
         },
+        data: { usadoEm: new Date() },
       });
 
       throw codigoInvalido;
@@ -186,14 +223,20 @@ export class AuthService {
     const tokenTroca = randomBytes(32).toString('base64url');
     const trocaExpiraEm = new Date(Date.now() + MINUTOS_VALIDADE_TROCA * 60 * 1000);
 
-    await this.prisma.tokenRecuperacaoSenha.update({
-      where: { id: registro.id },
+    // Condicional pelo mesmo motivo: duas verificacoes simultaneas do codigo
+    // certo passam pela leitura acima, mas so uma encontra `verificadoEm` nulo.
+    const emitido = await this.prisma.tokenRecuperacaoSenha.updateMany({
+      where: { id: registro.id, usadoEm: null, verificadoEm: null },
       data: {
         verificadoEm: new Date(),
         trocaHash: this.hashToken(tokenTroca),
         trocaExpiraEm,
       },
     });
+
+    if (emitido.count === 0) {
+      throw codigoInvalido;
+    }
 
     return { tokenTroca, expiraEm: trocaExpiraEm.toISOString() };
   }
@@ -208,34 +251,47 @@ export class AuthService {
       throw new BadRequestException('A confirmacao nao confere com a nova senha');
     }
 
+    // Mensagem unica para token inexistente, ja usado ou expirado.
+    const sessaoInvalida = new BadRequestException('Sessao de redefinicao invalida ou expirada');
+
     const registro = await this.prisma.tokenRecuperacaoSenha.findUnique({
       where: { trocaHash: this.hashToken(tokenTroca) },
       select: { id: true, usuarioId: true, trocaExpiraEm: true, usadoEm: true },
     });
 
-    // Mensagem unica para token inexistente, ja usado ou expirado.
+    // Checagem previa: evita gastar bcrypt com token invalido. A garantia de
+    // uso unico nao esta aqui, e sim no UPDATE condicional da transacao.
     if (
       !registro ||
       registro.usadoEm ||
       !registro.trocaExpiraEm ||
       registro.trocaExpiraEm < new Date()
     ) {
-      throw new BadRequestException('Sessao de redefinicao invalida ou expirada');
+      throw sessaoInvalida;
     }
 
     const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
     const senhaHash = await bcrypt.hash(novaSenha, saltRounds);
 
-    await this.prisma.$transaction([
-      this.prisma.usuario.update({
-        where: { id: registro.usuarioId },
-        data: { senhaHash },
-      }),
-      this.prisma.tokenRecuperacaoSenha.update({
-        where: { id: registro.id },
+    await this.prisma.$transaction(async (tx) => {
+      // Consome o token so se ainda estiver livre e no prazo: entre duas
+      // requisicoes simultaneas com o mesmo token, apenas uma troca a senha.
+      const consumido = await tx.tokenRecuperacaoSenha.updateMany({
+        where: { id: registro.id, usadoEm: null, trocaExpiraEm: { gt: new Date() } },
         data: { usadoEm: new Date() },
-      }),
-    ]);
+      });
+
+      if (consumido.count === 0) {
+        throw sessaoInvalida;
+      }
+
+      // Incrementar a versao revoga os JWTs emitidos antes da troca: quem
+      // estava com um token roubado perde o acesso junto com a senha antiga.
+      await tx.usuario.update({
+        where: { id: registro.usuarioId },
+        data: { senhaHash, versaoSessao: { increment: 1 } },
+      });
+    });
   }
 
   /** `randomInt` e uniforme e vem do CSPRNG; o padStart preserva zeros a esquerda. */
@@ -276,8 +332,22 @@ export class AuthService {
     `;
   }
 
-  private gerarToken(id: number, email: string): string {
-    const payload: PayloadJwt = { sub: id, email };
+  /**
+   * Hash de uma senha aleatoria, com o mesmo custo dos reais, para o `login`
+   * comparar quando o e-mail nao existe. Gerado uma vez, no primeiro uso.
+   */
+  private obterHashDescartavel(): Promise<string> {
+    const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
+    this.hashDescartavel ??= bcrypt.hash(randomBytes(16).toString('hex'), saltRounds);
+    return this.hashDescartavel;
+  }
+
+  private gerarToken(usuario: { id: number; email: string; versaoSessao: number }): string {
+    const payload: PayloadJwt = {
+      sub: usuario.id,
+      email: usuario.email,
+      ver: usuario.versaoSessao,
+    };
     return this.jwtService.sign(payload);
   }
 }

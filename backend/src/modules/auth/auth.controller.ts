@@ -49,8 +49,10 @@ export class AuthController {
   @ApiOperation({ summary: 'RF03 (1/3) - Enviar codigo de 6 digitos por e-mail' })
   @ApiResponse({ status: 200, type: RespostaRecuperacaoDto })
   @ApiResponse({ status: 429, description: 'Muitas tentativas; tente mais tarde' })
-  async recuperarSenha(@Body() dto: RecuperarSenhaDto): Promise<RespostaRecuperacaoDto> {
-    await this.authService.solicitarRecuperacaoSenha(dto.email);
+  recuperarSenha(@Body() dto: RecuperarSenhaDto): RespostaRecuperacaoDto {
+    // Sem await de proposito: o service dispara o envio e retorna na hora
+    // (ver solicitarRecuperacaoSenha), para o tempo nao revelar o e-mail.
+    this.authService.solicitarRecuperacaoSenha(dto.email);
     return { mensagem: MENSAGEM_GENERICA };
   }
 

@@ -91,16 +91,25 @@ Elas existem porque um código de 6 dígitos é curto o suficiente para ser adiv
 
 - **Validade de 15 minutos**, e o código vale **uma única vez**.
 - **Pedir um código novo invalida os anteriores** — só o último funciona.
-- **5 tentativas erradas queimam o código**, e aí nem o código certo funciona mais:
-  é preciso pedir outro. Esta é a defesa principal contra força bruta, porque não
-  depende do IP de quem tenta.
+- **5 tentativas queimam o código**, e aí nem o código certo funciona mais: é
+  preciso pedir outro. Esta é a defesa principal contra força bruta, porque não
+  depende do IP de quem tenta. A tentativa é reservada no banco **antes** de o
+  código ser conferido, num `UPDATE` condicional, então nem uma rajada de
+  requisições em paralelo passa do teto.
 - **Rate limit de 3 pedidos a cada 15 minutos** por IP na etapa 1, 10 na etapa 2 e
   5 na etapa 3. Estourar devolve **429**. O contador fica em memória: reiniciar a
   API zera.
-- **A resposta da etapa 1 é sempre a mesma**, exista o e-mail ou não. Se fosse
-  diferente, daria para descobrir quem tem conta no ViajaJunto só olhando a resposta.
+- **A resposta da etapa 1 é sempre a mesma**, exista o e-mail ou não, e chega no
+  mesmo tempo: a API responde antes de gravar o código e de chamar o Brevo. Se
+  esperasse, um e-mail cadastrado demoraria centenas de ms a mais, e daria para
+  descobrir quem tem conta no ViajaJunto só medindo o tempo de resposta.
 - **Falha no envio do e-mail não vira erro para o cliente**: é registrada no log e a
   resposta continua sendo 200. O código já está salvo e permanece válido.
+- **O token de troca vale uma única vez**, mesmo com requisições simultâneas: ele é
+  consumido no mesmo `UPDATE` que confere se ainda está livre.
+- **Redefinir a senha encerra todas as sessões**: os JWTs emitidos antes da troca
+  passam a receber 401, inclusive um token que tenha sido roubado. Cada usuário tem
+  uma versão de sessão, que vai no JWT e é incrementada na troca.
 
 ## Problemas comuns
 
@@ -119,6 +128,9 @@ a resposta do Brevo. Confira também a caixa de spam e os *Logs* em
 **Etapa 2 devolve 400 com um código que você acabou de receber** — verifique se é
 mesmo o e-mail **mais recente**: pedir um código novo invalida os pendentes. Se
 você errou o código 5 vezes antes, ele foi queimado; peça outro.
+
+**401 `Sessao encerrada; faca login novamente` depois de redefinir a senha** —
+esperado: a troca revoga os tokens anteriores. Faça login com a senha nova.
 
 **429 em tudo durante os testes** — você estourou o rate limit. Reinicie a API
 para zerar o contador, ou espere 15 minutos.

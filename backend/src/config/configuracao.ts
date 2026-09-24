@@ -8,8 +8,11 @@ export const configuracao = () => ({
   prefixoApi: process.env.API_PREFIX ?? 'api',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 
+  // Nos segredos o fallback usa `||`, nao `??`: o .env.example deixa a chave
+  // vazia (`CHAVE=`), e o dotenv entrega '' em vez de undefined. Com `??` a
+  // string vazia passaria direto e viraria a chave do HMAC/JWT.
   jwt: {
-    segredo: process.env.JWT_SECRET ?? 'segredo-de-desenvolvimento',
+    segredo: process.env.JWT_SECRET || 'segredo-de-desenvolvimento',
     expiraEm: process.env.JWT_EXPIRES_IN ?? '7d',
   },
 
@@ -20,7 +23,7 @@ export const configuracao = () => ({
     // Obrigatorio em producao (validacao-env.ts); fora dela cai neste padrao
     // para a API subir sem configuracao nenhuma.
     segredoRecuperacao:
-      process.env.RECUPERACAO_CODIGO_SECRET ?? 'segredo-de-desenvolvimento-do-rf03',
+      process.env.RECUPERACAO_CODIGO_SECRET || 'segredo-de-desenvolvimento-do-rf03',
   },
 
   integracoes: {

@@ -63,11 +63,14 @@ enum StatusAtividade {
 
 /// RF01, RF02 - contas de usuario. A senha e sempre persistida com hash (RNF03).
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nome      String   @db.VarChar(120)
-  email     String   @unique @db.VarChar(180)
-  senhaHash String   @map("senha_hash") @db.VarChar(255)
-  criadoEm  DateTime @default(now()) @map("criado_em")
+  id           Int      @id @default(autoincrement())
+  nome         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(180)
+  senhaHash    String   @map("senha_hash") @db.VarChar(255)
+  /// Vai no JWT (`ver`) e e conferida a cada requisicao pela JwtStrategy.
+  /// Incrementar invalida todos os tokens ja emitidos (ex.: apos redefinir a senha).
+  versaoSessao Int      @default(0) @map("versao_sessao")
+  criadoEm     DateTime @default(now()) @map("criado_em")
 
   viagensCriadas Viagem[]        @relation("ViagensCriadas")
   membroEm       MembroViagem[]
