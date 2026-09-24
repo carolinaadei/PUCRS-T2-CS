@@ -1,11 +1,9 @@
-# Nome de projeto explicito: sem isto o Compose usa o nome da pasta ('backend'),
-# que colide com outros projetos e faz os dois compartilharem o mesmo volume.
-name: viajajunto
+# Nome de projeto parametrizavel para evitar colisoes entre copias/worktrees.
+name: ${COMPOSE_PROJECT_NAME:-viajajunto}
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: viajajunto-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-viajajunto}
