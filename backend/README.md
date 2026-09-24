@@ -146,6 +146,7 @@ Todas sob o prefixo `/api`.
 | ------ | ---- | --------- | ------ |
 | `POST` | `/auth/registrar` | RF01 | Público |
 | `POST` | `/auth/login` | RF02 | Público |
+| `POST` | `/auth/logout` | RF02 | Autenticado |
 | `POST` | `/auth/recuperar-senha` | RF03 | Público |
 | `POST` | `/auth/verificar-codigo` | RF03 | Público |
 | `POST` | `/auth/redefinir-senha` | RF03 | Público |

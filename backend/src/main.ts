@@ -1,4 +1,4 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ExcecaoPrismaFilter } from './common/filters/excecao-prisma.filter';
 import { padroesDeDesenvolvimentoEmUso } from './config/validacao-env';
+import { criarPipeValidacao } from './common/pipes/pipe-validacao';
 
 /** Texto do topo do Swagger: as convencoes que valem para todas as rotas. */
 const DESCRICAO_API = [
@@ -28,16 +29,11 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefixo);
   app.use(helmet());
-  app.enableCors({ origin: config.get<string>('corsOrigin'), credentials: true });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // remove campos nao declarados nos DTOs
-      forbidNonWhitelisted: true, // e rejeita a requisicao se houver algum
-      transform: true, // converte payloads em instancias dos DTOs
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
+  const origem = config.get<string>('corsOrigin')!;
+  app.enableCors({ origin: origem, credentials: origem !== '*' });
+
+  app.useGlobalPipes(criarPipeValidacao());
 
   app.useGlobalFilters(new ExcecaoPrismaFilter());
 
