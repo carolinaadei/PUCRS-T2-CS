@@ -6,7 +6,7 @@ export const configuracao = () => ({
   ambiente: process.env.NODE_ENV ?? 'development',
   porta: parseInt(process.env.PORT ?? '3000', 10),
   prefixoApi: process.env.API_PREFIX ?? 'api',
-  corsOrigin: process.env.CORS_ORIGIN ?? '*',
+  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3001',
 
   jwt: {
     segredo: process.env.JWT_SECRET ?? 'segredo-de-desenvolvimento',

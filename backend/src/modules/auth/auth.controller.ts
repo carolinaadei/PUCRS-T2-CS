@@ -15,6 +15,7 @@ export class AuthController {
   @Post('registrar')
   @ApiOperation({ summary: 'RF01 - Cadastrar conta' })
   @ApiResponse({ status: 201, type: RespostaAutenticacaoDto })
+  @ApiResponse({ status: 400, description: 'Dados invalidos' })
   @ApiResponse({ status: 409, description: 'E-mail ja cadastrado' })
   registrar(@Body() dto: RegistrarDto): Promise<RespostaAutenticacaoDto> {
     return this.authService.registrar(dto);
@@ -25,6 +26,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'RF02 - Autenticar usuario' })
   @ApiResponse({ status: 200, type: RespostaAutenticacaoDto })
+  @ApiResponse({ status: 400, description: 'Dados invalidos' })
   @ApiResponse({ status: 401, description: 'Credenciais invalidas' })
   login(@Body() dto: LoginDto): Promise<RespostaAutenticacaoDto> {
     return this.authService.login(dto);
