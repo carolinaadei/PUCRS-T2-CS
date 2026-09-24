@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PayloadJwt } from '../../common/types/usuario-autenticado';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -33,12 +34,20 @@ export class AuthService {
     const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
     const senhaHash = await bcrypt.hash(dto.senha, saltRounds);
 
-    const usuario = await this.prisma.usuario.create({
-      data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
-      select: { id: true, nome: true, email: true },
-    });
+    try {
+      const usuario = await this.prisma.usuario.create({
+        data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
+        select: { id: true, nome: true, email: true },
+      });
 
-    return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
+      return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
+    } catch (erro) {
+      if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
+        throw new ConflictException('Ja existe uma conta com este e-mail');
+      }
+
+      throw erro;
+    }
   }
 
   /**

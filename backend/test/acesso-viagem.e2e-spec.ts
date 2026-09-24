@@ -1,8 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { PermissaoMembro } from '@prisma/client';
 import request from 'supertest';
+import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -54,9 +55,7 @@ describe('AcessoViagemGuard (e2e)', () => {
 
     app = modulo.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
-    );
+    app.useGlobalPipes(criarPipeValidacao());
 
     jwtService = modulo.get(JwtService);
     await app.init();
