@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { PayloadJwt } from '../../common/types/usuario-autenticado';
@@ -29,6 +30,7 @@ const MINUTOS_VALIDADE_TROCA = 10;
  * escapar do ThrottlerGuard.
  */
 const MAX_TENTATIVAS = 5;
+import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 
 @Injectable()
 export class AuthService {
@@ -69,9 +71,28 @@ export class AuthService {
       accessToken: this.gerarToken(usuario),
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
     };
+    try {
+      const usuario = await this.prisma.usuario.create({
+        data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
+        select: { id: true, nome: true, email: true },
+      });
+
+      return { accessToken: this.gerarToken(usuario.id, usuario.email), usuario };
+    } catch (erro) {
+      if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
+        throw new ConflictException('Ja existe uma conta com este e-mail');
+      }
+
+      throw erro;
+    }
   }
 
-  /** RF02 - autentica e devolve o token de acesso. */
+  /**
+   * RF02 - Autentica o usuario validando e-mail e hash da senha (RNF03).
+   * @param dto Credenciais contendo e-mail e senha.
+   * @throws UnauthorizedException Se o e-mail ou senha forem invalidos.
+   * @returns Token JWT de acesso e dados publicos do usuario.
+   */
   async login(dto: LoginDto): Promise<RespostaAutenticacaoDto> {
     const emailNormalizado = dto.email.trim().toLowerCase();
 
@@ -102,11 +123,6 @@ export class AuthService {
   }
 
   /**
-   * RF03 - etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
-   * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma, e
-   * chega no mesmo tempo, porque o trabalho roda sem ser esperado. Se fosse
-   * esperado, o e-mail cadastrado demoraria centenas de ms a mais (gravacao no
-   * banco + chamada ao Brevo) e o tempo de resposta entregaria quem tem conta.
    */
   solicitarRecuperacaoSenha(email: string): void {
     void this.enviarCodigoRecuperacao(email).catch((erro: unknown) =>
@@ -348,6 +364,14 @@ export class AuthService {
       email: usuario.email,
       ver: usuario.versaoSessao,
     };
+   * Gera o token de acesso assinado contendo identificador e e-mail no payload JWT.
+   * @param id Identificador do usuario.
+   * @param email E-mail do usuario.
+   * @returns Token JWT assinado.
+   */
+  private gerarToken(id: number, email: string): string {
+    const payload: PayloadJwt = { sub: id, email };
     return this.jwtService.sign(payload);
   }
 }
+
