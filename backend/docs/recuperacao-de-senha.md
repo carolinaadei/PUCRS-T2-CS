@@ -18,15 +18,16 @@ somente depois que o código confere. É ele que autoriza a etapa 3 — o códig
 
 ## Variáveis de ambiente
 
-Todas obrigatórias: **a aplicação não sobe sem elas**, por opção — é melhor falhar
-no boot do que descobrir a configuração faltando quando um usuário real pedir
-para recuperar a senha.
+Em produção, `JWT_SECRET`, `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` e
+`RECUPERACAO_CODIGO_SECRET` são obrigatórias; `BREVO_SENDER_NOME` é opcional.
+A aplicação falha no boot quando uma variável obrigatória está faltando.
 
 | Variável | O que é |
 | -------- | ------- |
+| `JWT_SECRET` | Segredo usado para assinar os tokens JWT |
 | `BREVO_API_KEY` | Chave da API v3 do Brevo, começa com `xkeysib-` |
 | `BREVO_SENDER_EMAIL` | Remetente, **já validado** no painel do Brevo |
-| `BREVO_SENDER_NOME` | Nome que aparece como remetente (ex.: `ViajaJunto`) |
+| `BREVO_SENDER_NOME` | Nome opcional que aparece como remetente (ex.: `ViajaJunto`) |
 | `RECUPERACAO_CODIGO_SECRET` | Segredo do HMAC do código. Mínimo de 32 caracteres |
 
 Gere o segredo com:
