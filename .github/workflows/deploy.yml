@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+# O mkdocs gh-deploy empurra o site para a branch gh-pages, ou seja escreve no
+# repositorio - o token precisa disso explicitamente.
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

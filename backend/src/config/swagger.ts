@@ -23,6 +23,15 @@ export const criarDocumentoSwagger = (app: INestApplication): OpenAPIObject =>
       .setTitle('ViajaJunto API')
       .setDescription(DESCRICAO_API)
       .setVersion('0.1.0')
+      // Contato, licenca e servers nao aparecem na pagina do Swagger, mas o
+      // Spectral (regras spectral:oas) cobra os tres no CI.
+      .setContact(
+        'Equipe ViajaJunto',
+        'https://github.com/carolinaadei/PUCRS-T2-CS',
+        'carolina.g@edu.pucrs.br',
+      )
+      .setLicense('GPL-3.0', 'https://www.gnu.org/licenses/gpl-3.0.html')
+      .addServer('http://localhost:3000', 'Ambiente local')
       .addBearerAuth()
       // A ordem das tags e a ordem das secoes na pagina.
       .addTag('Autenticacao', 'Cadastro, login e recuperacao de senha (RF01 a RF03)')

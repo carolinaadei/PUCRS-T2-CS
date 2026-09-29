@@ -40,3 +40,4 @@ nav:
     - Documento de Requisitos: requirements.md
     - Documento de Arquitetura: architecture.md
     - Identidade Visual: visual_id.md
+    - Pipeline de CI/CD: pipeline.md
