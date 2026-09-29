@@ -30,9 +30,11 @@ extra:
       link: https://github.com/profschardosim/construcao-2026.2-t1
 
 markdown_extensions:
+  # O modulo `materialx` foi descontinuado: a logica de emoji passou para dentro
+  # do mkdocs-material na versao 9.4, e o build avisa isso em todo deploy.
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 nav:
   - Artefatos:
