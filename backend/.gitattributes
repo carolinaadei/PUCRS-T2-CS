@@ -1,0 +1,7 @@
+# Normaliza as quebras de linha: LF no repositorio, independente do SO do dev.
+# Evita conflitos entre Windows (CRLF) e Linux/macOS (LF) e o erro
+# "Delete CR" do Prettier.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary

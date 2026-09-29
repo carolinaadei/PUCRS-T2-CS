@@ -10,7 +10,9 @@
 
 | Membro | E-mail | Github | Papel | Matrícula |
 |--------|--------|--------|-------|-----------|
-| [Nome do integrante] | [email@pucrs.br] | [usuario-github](https://github.com/usuario-github) | [papel] | [matrícula] |
+| Carolina De Souza Gonçalves | carolina.g@edu.pucrs.br | [carolinaadei](https://github.com/carolinaadei) | [papel] | 24201034-6 |
+| Jully Anne Seyffert da Silva Jara | jully.j@edu.pucrs.br | [jullySeyffert](https://github.com/jullySeyffert) | [papel] | 23280111-8 |
+| Rafael Meira Kreutz | rafael.kreutz003@edu.pucrs.br | [RafaelKreutz](https://github.com/RafaelKreutz) | [papel] | 24102576-6 |
 
 ### Conheça nossa documentação
 * [Documentação completa](https://profschardosim.github.io/construcao-2026.2-t1/)

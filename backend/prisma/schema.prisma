@@ -1,0 +1,255 @@
+// ============================================================
+// ViajaJunto - Modelo de dados
+// Espelha a Secao 5 do Documento de Arquitetura (DER / DLD).
+// Nomes de tabelas e colunas em snake_case (@@map / @map) para
+// manter o banco identico ao documentado; o codigo TypeScript
+// usa camelCase.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------- Enums ----------------------------
+
+enum StatusViagem {
+  EM_PLANEJAMENTO
+  CONFIRMADA
+  CONCLUIDA
+
+  @@map("status_viagem")
+}
+
+enum PermissaoMembro {
+  EDITOR
+  VISUALIZADOR
+
+  @@map("permissao_membro")
+}
+
+enum CategoriaDestino {
+  CIDADE
+  PRAIA
+  NATUREZA
+  CULTURAL
+
+  @@map("categoria_destino")
+}
+
+enum TipoAtividade {
+  PASSEIO
+  REFEICAO
+  HOSPEDAGEM
+  TRANSPORTE
+  OUTRO
+
+  @@map("tipo_atividade")
+}
+
+enum StatusAtividade {
+  PENDENTE
+  CONFIRMADA
+  CONCLUIDA
+
+  @@map("status_atividade")
+}
+
+// ------------------------ Modelos ---------------------------
+
+/// RF01, RF02 - contas de usuario. A senha e sempre persistida com hash (RNF03).
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nome         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(180)
+  senhaHash    String   @map("senha_hash") @db.VarChar(255)
+  /// Vai no JWT (`ver`) e e conferida a cada requisicao pela JwtStrategy.
+  /// Incrementar invalida todos os tokens ja emitidos (ex.: apos redefinir a senha).
+  versaoSessao Int      @default(0) @map("versao_sessao")
+  criadoEm     DateTime @default(now()) @map("criado_em")
+
+  viagensCriadas Viagem[]        @relation("ViagensCriadas")
+  membroEm       MembroViagem[]
+  avaliacoes     Avaliacao[]
+  tokensRecuperacaoSenha TokenRecuperacaoSenha[]
+
+  @@map("usuario")
+}
+
+/// RF03 - codigo de uso unico para redefinicao de senha via e-mail (Brevo).
+/// Fluxo em duas etapas: o usuario recebe o codigo de 6 digitos, valida-o em
+/// /auth/verificar-codigo e recebe um token de troca de vida curta; so ele
+/// autoriza /auth/redefinir-senha.
+///
+/// Nem o codigo nem o token de troca sao persistidos em claro. O codigo usa
+/// HMAC (e nao SHA-256 puro): com apenas 10^6 valores possiveis, um digest sem
+/// segredo seria revertido por forca bruta em segundos por quem lesse o banco.
+model TokenRecuperacaoSenha {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  codigoHash    String    @map("codigo_hash") @db.VarChar(64)
+  /// Codigos errados acumulam aqui; ao atingir o teto o registro e queimado.
+  /// Defesa independente do IP, ao contrario do rate limit do ThrottlerGuard.
+  tentativas    Int       @default(0)
+  expiraEm      DateTime  @map("expira_em")
+  verificadoEm  DateTime? @map("verificado_em")
+  /// Emitido apos o codigo conferir. 256 bits de entropia, logo pode ser unico.
+  trocaHash     String?   @unique @map("troca_hash") @db.VarChar(64)
+  trocaExpiraEm DateTime? @map("troca_expira_em")
+  usadoEm       DateTime? @map("usado_em")
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Busca quente: o unico codigo pendente de um usuario.
+  @@index([usuarioId, usadoEm])
+  @@map("token_recuperacao_senha")
+}
+
+/// RF04 a RF07 - a viagem e a raiz de agregacao do planejamento.
+/// O `id` e o proprio codigo de convite usado no RF18.
+model Viagem {
+  id         String       @id @db.VarChar(12)
+  nome       String       @db.VarChar(120)
+  descricao  String?      @db.Text
+  dataInicio DateTime?    @map("data_inicio") @db.Date
+  dataFim    DateTime?    @map("data_fim") @db.Date
+  status     StatusViagem @default(EM_PLANEJAMENTO)
+  criadoPor  Int          @map("criado_por")
+  criadoEm   DateTime     @default(now()) @map("criado_em")
+
+  criador  Usuario         @relation("ViagensCriadas", fields: [criadoPor], references: [id], onDelete: Cascade)
+  membros  MembroViagem[]
+  destinos DestinoViagem[]
+  orcamento Orcamento?
+
+  @@index([criadoPor])
+  @@map("viagem")
+}
+
+/// RF18 a RF20, RN02/RN03/RN04 - vinculo entre usuario e viagem com nivel de permissao.
+model MembroViagem {
+  id        Int             @id @default(autoincrement())
+  viagemId  String          @map("viagem_id") @db.VarChar(12)
+  usuarioId Int             @map("usuario_id")
+  permissao PermissaoMembro
+  entrouEm  DateTime        @default(now()) @map("entrou_em")
+
+  viagem  Viagem  @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([viagemId, usuarioId])
+  @@index([usuarioId])
+  @@map("membro_viagem")
+}
+
+/// RF09, RF10 - catalogo global de destinos (cidades) reaproveitado entre viagens.
+model DestinoCatalogo {
+  id        Int               @id @default(autoincrement())
+  nome      String            @db.VarChar(120)
+  pais      String?           @db.VarChar(80)
+  categoria CategoriaDestino?
+  descricao String?           @db.Text
+  latitude  Float?
+  longitude Float?
+  fotoUrl   String?           @map("foto_url") @db.VarChar(500)
+
+  destinosViagem DestinoViagem[]
+
+  @@index([nome])
+  @@map("destino_catalogo")
+}
+
+/// RF08 - destino do catalogo colocado dentro de uma viagem, com ordem de visita.
+model DestinoViagem {
+  id                Int       @id @default(autoincrement())
+  viagemId          String    @map("viagem_id") @db.VarChar(12)
+  destinoCatalogoId Int       @map("destino_catalogo_id")
+  chegada           DateTime? @db.Date
+  saida             DateTime? @db.Date
+  descricao         String?   @db.Text
+  ordem             Int       @default(0)
+
+  viagem          Viagem            @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  destinoCatalogo DestinoCatalogo   @relation(fields: [destinoCatalogoId], references: [id], onDelete: Restrict)
+  atividades      AtividadeViagem[]
+
+  @@index([viagemId])
+  @@map("destino_viagem")
+}
+
+/// RF23, RF24 - catalogo global de atividades/locais, enriquecido pela Google Places API.
+model CatalogoAtividade {
+  id             Int           @id @default(autoincrement())
+  nome           String        @db.VarChar(180)
+  descricao      String?       @db.Text
+  tipoAtividade  TipoAtividade @map("tipo_atividade")
+  local          String?       @db.VarChar(255)
+  cidade         String?       @db.VarChar(120)
+  pais           String?       @db.VarChar(80)
+  latitude       Float?
+  longitude      Float?
+  googlePlaceId  String?       @unique @map("google_place_id") @db.VarChar(255)
+  fotoUrl        String?       @map("foto_url") @db.VarChar(500)
+  fonte          String        @default("google_places") @db.VarChar(40)
+  mediaAvaliacao Float         @default(0) @map("media_avaliacao")
+  criadoEm       DateTime      @default(now()) @map("criado_em")
+
+  atividadesViagem AtividadeViagem[]
+  avaliacoes       Avaliacao[]
+
+  @@index([nome])
+  @@index([tipoAtividade])
+  @@map("catalogo_atividade")
+}
+
+/// RF12 a RF14 - atividade agendada dentro de um destino da viagem.
+model AtividadeViagem {
+  id                  Int             @id @default(autoincrement())
+  destinoViagemId     Int             @map("destino_viagem_id")
+  catalogoAtividadeId Int             @map("catalogo_atividade_id")
+  dataHorario         DateTime?       @map("data_horario")
+  duracaoMin          Int?            @map("duracao_min")
+  custoPrevisto       Decimal?        @map("custo_previsto") @db.Decimal(10, 2)
+  status              StatusAtividade @default(PENDENTE)
+
+  destinoViagem     DestinoViagem     @relation(fields: [destinoViagemId], references: [id], onDelete: Cascade)
+  catalogoAtividade CatalogoAtividade @relation(fields: [catalogoAtividadeId], references: [id], onDelete: Restrict)
+
+  @@index([destinoViagemId])
+  @@index([dataHorario])
+  @@map("atividade_viagem")
+}
+
+/// RF15 a RF17 - orcamento da viagem (relacao 1:1).
+model Orcamento {
+  id                  Int     @id @default(autoincrement())
+  viagemId            String  @unique @map("viagem_id") @db.VarChar(12)
+  valorTotal          Decimal @map("valor_total") @db.Decimal(10, 2)
+  previstoAtividades  Decimal @default(0) @map("previsto_atividades") @db.Decimal(10, 2)
+
+  viagem Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+
+  @@map("orcamento")
+}
+
+/// RF22, RN05 - avaliacao de uma atividade por um usuario registrado.
+model Avaliacao {
+  id                  Int      @id @default(autoincrement())
+  usuarioId           Int      @map("usuario_id")
+  catalogoAtividadeId Int      @map("catalogo_atividade_id")
+  nota                Int
+  comentario          String?  @db.Text
+  criadoEm            DateTime @default(now()) @map("criado_em")
+
+  usuario           Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  catalogoAtividade CatalogoAtividade @relation(fields: [catalogoAtividadeId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, catalogoAtividadeId])
+  @@index([catalogoAtividadeId])
+  @@map("avaliacao")
+}
