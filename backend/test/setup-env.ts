@@ -7,7 +7,15 @@
  * tem um `.env` local continua rodando com os proprios valores.
  *
  * Nenhum teste toca o banco - o PrismaService e substituido por mock.
+ *
+ * Usado tambem por scripts/gerar-openapi.ts, que sobe o AppModule fora do Jest e
+ * esbarra na mesma validacao.
  */
+
+// Sem nenhum import ou export o TypeScript trata o arquivo como script global, e
+// nao como modulo - o `await import()` do gerar-openapi.ts falha com TS2306. O
+// Jest carrega este arquivo por setupFiles e nao se importa com a diferenca.
+export {};
 const PADROES_DE_TESTE: Record<string, string> = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgresql://teste:teste@localhost:5432/teste?schema=public',

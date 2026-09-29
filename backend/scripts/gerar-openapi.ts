@@ -14,9 +14,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { Test } from '@nestjs/testing';
-import { AppModule } from '../src/app.module';
-import { criarDocumentoSwagger } from '../src/config/swagger';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 const DESTINO = resolve(__dirname, '..', 'openapi.json');
 
@@ -27,6 +24,20 @@ const prismaMock = {
 };
 
 async function gerar(): Promise<void> {
+  // Os imports abaixo sao dinamicos de proposito. O AppModule valida o ambiente
+  // ainda no import (validarEnv, via ConfigModule.forRoot), e DATABASE_URL e
+  // obrigatoria sempre. No CI nao existe `.env` - ele e versionado no .gitignore -
+  // entao com import estatico o script morria antes da primeira linha rodar.
+  //
+  // setup-env.ts e o mesmo arquivo que os testes usam: ele preenche os minimos
+  // com `??=`, sem sobrescrever quem ja tem um `.env` local. Reaproveita-lo evita
+  // uma segunda lista de padroes para manter em sincronia. Nada aqui toca o banco.
+  await import('../test/setup-env');
+
+  const { AppModule } = await import('../src/app.module');
+  const { criarDocumentoSwagger } = await import('../src/config/swagger');
+  const { PrismaService } = await import('../src/prisma/prisma.service');
+
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService)
     .useValue(prismaMock)
