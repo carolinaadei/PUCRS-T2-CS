@@ -38,7 +38,7 @@ RUN npm ci --ignore-scripts
 # O schema vem antes do resto do codigo: enquanto ele nao muda, o generate
 # (que baixa engines) reaproveita a camada em cache.
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN npm run prisma:generate
 
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src

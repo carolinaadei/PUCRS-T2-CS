@@ -152,6 +152,46 @@ Tags aplicadas (`docker/metadata-action`), todas apontando para o mesmo digest:
 
 ---
 
+## Endurecimento do próprio pipeline
+
+O SonarQube analisa os workflows e o `Dockerfile`, não só o TypeScript. A primeira
+análise do CI reprovou o Quality Gate com **Security Rating C** e 18
+vulnerabilidades — todas no pipeline. As três causas e o que mudou:
+
+### Actions de terceiros fixadas no SHA do commit
+
+```yaml
+uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+```
+
+Uma tag Git é um ponteiro móvel: quem controla o repositório da action pode
+reapontar `v0.36.0` para outro commit, e o CI passaria a executar código diferente
+sem nenhuma alteração aqui. O SHA é imutável. As actions `actions/*` seguem por
+tag — são mantidas pelo próprio GitHub e o Sonar as isenta.
+
+O comentário com a versão ao lado do SHA não é decoração: é o que permite ao
+Dependabot reconhecer a versão e abrir PR de atualização, e o que torna o `git
+blame` legível.
+
+### `npm ci --ignore-scripts`
+
+Sem a flag, os scripts de ciclo de vida de **qualquer** dependência transitiva
+rodam com acesso total ao runner durante a instalação — o vetor clássico de
+comprometimento de cadeia de suprimentos em CI. Ignorá-los é seguro aqui porque o
+único script que importa é o do Prisma, chamado logo em seguida de forma explícita.
+
+### `npm run prisma:generate` no lugar de `npx prisma generate`
+
+O `npx` baixa e executa um pacote sob demanda se ele não estiver instalado, sem
+versão fixa. O `npm run` usa o binário que já veio do lockfile. Vale para o CI e
+para o `Dockerfile`.
+
+Resultado: **zero vulnerabilidades**. Resta um *code smell* de severidade `LOW`
+(convenção de nome do parâmetro de `catch` em `scripts/gerar-openapi.ts`), que não
+afeta nenhuma condição do Quality Gate.
+
+---
+
 ## Configuração manual
 
 O código do pipeline está no repositório, mas estes quatro itens só existem nas
