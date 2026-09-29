@@ -274,13 +274,37 @@ Passos restantes:
 
 ## Evidência da entrega
 
-Para fechar o item "link de uma PR fechada com os checks passando":
+**PR de evidência:** https://github.com/carolinaadei/PUCRS-T2-CS/pull/8
 
-1. Abra um PR de `dev` → `main` com estas mudanças.
-2. Espere os cinco checks ficarem verdes.
-3. Faça o merge e cole aqui o link do PR fechado:
+PR `feat/repo-e-gates` → `dev`, que introduziu o pipeline. Os cinco portões
+passaram no commit `d4feb6b`:
 
-**PR de evidência:** _(preencher com a URL do PR após o merge)_
+| Check | Resultado |
+|-------|-----------|
+| `Lint (ESLint)` | ✅ |
+| `Testes + cobertura` | ✅ 25 testes unitários + 45 e2e |
+| `Contrato OpenAPI (Spectral)` | ✅ zero erros e zero warnings |
+| `SonarQube (Quality Gate)` | ✅ gate `OK`, cobertura de 64% recebida |
+| `Imagem Docker + Trivy` | ✅ zero vulnerabilidades HIGH/CRITICAL |
+| `Publicar no Docker Hub` | `skipped` — correto: só roda em push na `main` e tags `v*` |
+
+O `Publicar no Docker Hub` aparece como `skipped` neste PR por desenho: publicar a
+partir de um PR significaria colocar no registro uma imagem que ainda não foi
+aprovada para a `main`.
+
+A publicação é evidenciada pelo PR seguinte, `dev` → `main`, cujo merge dispara o
+job e demonstra também a proteção da branch em funcionamento:
+
+**PR de merge na main:** https://github.com/carolinaadei/PUCRS-T2-CS/pull/9
+
+O merge desse PR (commit `14bc8a2`) fechou os dois últimos itens da entrega:
+
+- disparou o job `Publicar no Docker Hub`, que só roda em push na `main` e em tags
+  `v*` — é ali que a imagem aprovada pelo Trivy vai para o registro;
+- registrou o workflow `Deploy da Documentação` na branch padrão. Ele estava em
+  `backend/.github/workflows/` e nunca havia executado, porque o GitHub só lê
+  workflows de `.github/workflows/` na raiz do repositório. A documentação passou
+  a ser publicada na branch `gh-pages`.
 
 ## Rodando os portões localmente
 
