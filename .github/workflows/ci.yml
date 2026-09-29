@@ -182,6 +182,11 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
+          # Sem isto o scanner usa a raiz do repositorio, nao encontra o
+          # backend/sonar-project.properties ("Project root configuration file:
+          # NONE") e aborta cobrando sonar.projectKey e sonar.organization. E
+          # tambem daqui que saem os caminhos relativos do lcov e de sonar.sources.
+          projectBaseDir: backend
           # qualitygate.wait faz o scanner bloquear ate o servidor calcular o
           # gate e sair com codigo != 0 se reprovar - e isso que derruba o PR.
           # Sem ele o job passaria mesmo com o gate vermelho.

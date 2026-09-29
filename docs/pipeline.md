@@ -174,14 +174,25 @@ estiverem vazios, em vez de deixar o erro cru do scanner no log.
 
 ### B. Projeto no SonarQube / SonarCloud
 
-1. Crie o projeto com a chave **`viajajunto-backend`** — ela precisa ser igual ao
-   `sonar.projectKey` de `backend/sonar-project.properties`.
-2. No SonarCloud, descomente `sonar.organization` no mesmo arquivo e preencha com
-   a sua organização.
-3. Gere um token em `My Account → Security` e guarde como `SONAR_TOKEN`.
-4. **Desligue a Automatic Analysis** (SonarCloud: `Administration → Analysis
-   Method`). Com ela ligada, a análise do CI é rejeitada.
-5. Confira o Quality Gate em `Project Settings → Quality Gate`. O *Sonar way*
+O projeto já está criado no SonarQube Cloud, importado do GitHub. As chaves estão
+em `backend/sonar-project.properties` e precisam continuar batendo com o servidor:
+
+```properties
+sonar.projectKey=carolinaadei_PUCRS-T2-CS
+sonar.organization=carolinaadei
+```
+
+Passos restantes:
+
+1. Gere um token em `My Account → Security` e guarde como `SONAR_TOKEN`.
+2. **Desligue a Automatic Analysis** (`Administration → Analysis Method`). Com ela
+   ligada, a análise do CI é rejeitada — e ela também ignora este arquivo de
+   configuração: a primeira análise automática varreu o repositório inteiro e
+   contabilizou 37 mil linhas e ~1000 "bugs", quase tudo vindo do Bootstrap e do
+   FontAwesome versionados em `docs/stylesheets/assets/`. A análise do CI roda com
+   `projectBaseDir=backend` e `sonar.sources=src`, ou seja, apenas as ~4.800
+   linhas de código nosso.
+3. Confira o Quality Gate em `Project Settings → Quality Gate`. O *Sonar way*
    padrão cobra 80% de cobertura **em código novo** — só o que o PR alterou, não o
    projeto inteiro.
 
