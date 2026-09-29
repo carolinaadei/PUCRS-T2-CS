@@ -1,9 +1,17 @@
 {
+  "comentario": [
+    "rootDir aponta para a raiz do backend, e nao para test/: o collectCoverageFrom",
+    "do Jest so aceita padroes dentro do rootDir, entao com rootDir em test/ a",
+    "cobertura de src/ saia vazia (sem erro, o que e pior). Os demais caminhos",
+    "usam <rootDir> e acompanham a mudanca."
+  ],
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": { "^.+.(t|j)s$": "ts-jest" },
-  "moduleNameMapper": { "^src/(.*)$": "<rootDir>/../src/$1" },
-  "setupFiles": ["<rootDir>/setup-env.ts"]
+  "moduleNameMapper": { "^src/(.*)$": "<rootDir>/src/$1" },
+  "setupFiles": ["<rootDir>/test/setup-env.ts"],
+  "collectCoverageFrom": ["src/**/*.(t|j)s"],
+  "coverageDirectory": "coverage-e2e"
 }

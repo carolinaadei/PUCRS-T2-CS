@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+coverage-e2e/
 .env
 .env.local
 # Copias do .env com credenciais reais (env.txt, env-backup.txt, prod.env, ...).
@@ -10,3 +11,5 @@ env*.txt
 *.log
 .DS_Store
 env.txt
+# Contrato OpenAPI gerado por `npm run openapi:gerar` a partir dos decorators.
+openapi.json
