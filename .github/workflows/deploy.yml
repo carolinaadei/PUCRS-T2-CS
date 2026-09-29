@@ -1,29 +1,84 @@
+# Publica a documentacao (MkDocs) no GitHub Pages a cada push na main.
+#
+# Antes este workflow rodava `mkdocs gh-deploy --force`, que constroi o site e
+# empurra o resultado para uma branch `gh-pages`. Isso falhou com:
+#
+#   ! [remote rejected] gh-pages -> gh-pages
+#     (cannot lock ref 'refs/heads/gh-pages': unable to resolve reference)
+#
+# A branch `gh-pages` tinha sido apagada, e o ref ficou num estado que o proprio
+# `--force` nao consegue travar para recriar. Publicar por uma branch versionada
+# tem outros custos: o HTML gerado entra no historico do repositorio, o workflow
+# precisa de permissao de escrita no codigo, e o site so aparece depois que o
+# Pages percebe o push.
+#
+# Aqui o site vai por artifact, pelas actions oficiais de Pages: nada e commitado,
+# o token nao precisa escrever no repositorio e o deploy e atomico. Em troca, o
+# Pages do repositorio precisa estar configurado com Source = "GitHub Actions"
+# (Settings -> Pages); com a opcao antiga, "Deploy from a branch", este workflow
+# publica e nada aparece.
+
 name: Deploy da Documentação
 
 on:
   push:
     branches:
       - main
+  # Permite republicar sem precisar de um commit novo - util para o primeiro
+  # deploy depois de trocar a Source do Pages.
+  workflow_dispatch:
 
-# O mkdocs gh-deploy empurra o site para a branch gh-pages, ou seja escreve no
-# repositorio - o token precisa disso explicitamente.
+# `pages: write` e `id-token: write` sao o que a deploy-pages exige; `contents`
+# volta a ser somente leitura, porque nada mais e commitado.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+# Um deploy por vez. `cancel-in-progress: false` porque cancelar um deploy no meio
+# deixa o Pages num estado indefinido - melhor enfileirar e deixar terminar.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  construir:
+    name: Construir o site
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v7
 
       - name: Configurar Python
         uses: actions/setup-python@v7
         with:
-          python-version: 3.x
-      
-      - name: Instalar mkdocs-material
-        run: pip install mkdocs-material
+          python-version: '3.13'
 
-      - name: Realizando deploy
-        run: mkdocs gh-deploy --force
+      # Versao fixa: o time do Material avisa no proprio log do build que o
+      # MkDocs 2.0 remove o sistema de plugins e o de temas, sem caminho de
+      # migracao. Com `pip install mkdocs-material` solto, essa quebra chegaria
+      # sozinha num push qualquer.
+      - name: Instalar o MkDocs Material
+        run: pip install mkdocs-material==9.7.7
+
+      - name: Construir o site
+        run: mkdocs build --strict
+
+      - uses: actions/configure-pages@v6.0.0
+
+      - name: Enviar o site como artifact
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          # `mkdocs build` escreve em site/ (padrao do site_dir).
+          path: site
+
+  publicar:
+    name: Publicar no GitHub Pages
+    runs-on: ubuntu-latest
+    needs: construir
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v5.0.1
