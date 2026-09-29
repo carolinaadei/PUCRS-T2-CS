@@ -11,7 +11,8 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,test,scripts}/**/*.ts\" --fix",
+    "lint:ci": "eslint \"{src,test,scripts}/**/*.ts\" --max-warnings=0",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -22,7 +23,19 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
-    "test:integracao": "jest --config ./test/jest-e2e.json --runInBand integracao"
+    "test:integracao": "jest --config ./test/jest-e2e.json --runInBand integracao",
+    "test:cov:e2e": "jest --config ./test/jest-e2e.json --runInBand --coverage",
+    "openapi:gerar": "ts-node -P tsconfig.json scripts/gerar-openapi.ts"
+  },
+  "_comentario_overrides": [
+    "Correcoes de seguranca em dependencias transitivas que o Trivy acusa como",
+    "HIGH no CI. Em ambos os casos o pacote pai ja esta na ultima versao publicada",
+    "e ainda aponta para a versao vulneravel, entao o override e a unica saida",
+    "sem trocar de framework. Remova a entrada quando o pai subir sozinho."
+  ],
+  "overrides": {
+    "multer": "^2.3.0",
+    "deepmerge-ts": "^8.0.0"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
