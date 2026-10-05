@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  Ambiente de demonstracao da API ViajaJunto. Cria uma instancia EC2 que sobe
+  dois conteineres - o postgres:16-alpine e a imagem do backend que o CI publica
+  no Docker Hub - e expoe o Swagger e o /api/health na porta 3000.
+
+  O banco fica na mesma instancia de proposito: com Amazon RDS a criacao da
+  pilha leva vários minutos, o que atrapalha uma demonstracao ao vivo.
+
+Parameters:
+
+  ImagemBackend:
+    Type: String
+    Description: >-
+      Repositorio da imagem no Docker Hub, sem a tag (ex.:
+      seu-usuario/viajajunto-backend). E o que o job "Publicar no Docker Hub"
+      do CI empurra a cada push na main.
+    MinLength: 3
+
+  TagImagem:
+    Type: String
+    Description: Tag da imagem. O CI publica "latest" na main e "vX.Y.Z" nas tags.
+    Default: latest
+    MinLength: 1
+
+  TipoInstancia:
+    Type: String
+    Description: >-
+      Tipo da instancia. A t3.micro (1 GiB) da conta do Postgres e da API
+      juntos; os maiores estao aqui para o passo do conjunto de alteracoes.
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+
+  JwtSecret:
+    Type: String
+    Description: >-
+      Segredo de assinatura dos tokens JWT. Gere um com
+      "openssl rand -base64 32".
+    NoEcho: true
+    MinLength: 16
+
+  # Parametro do tipo SSM: o CloudFormation resolve o caminho abaixo para o ID
+  # da AMI mais recente na regiao da pilha. Evita uma secao Mappings com um ID
+  # por regiao, que envelhece a cada atualizacao da imagem.
+  AmiAmazonLinux:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: Caminho no SSM da AMI do Amazon Linux 2023 (x86_64).
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+
+  # Sem VpcId: o grupo nasce na VPC padrao da conta, a mesma onde a instancia
+  # sobe quando nenhuma sub-rede e informada.
+  GrupoSeguranca:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Libera a porta 3000 (API ViajaJunto) para a internet.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: Swagger e /api/health do ambiente de demonstracao
+
+  InstanciaDemo:
+    Type: AWS::EC2::Instance
+    # A instancia so conta como criada quando o UserData sinaliza. Sem isto a
+    # pilha chegaria a CREATE_COMPLETE em segundos, muito antes de o Docker
+    # instalar e a API responder - e a URL de saida daria "connection refused"
+    # na hora da demonstracao.
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Properties:
+      ImageId: !Ref AmiAmazonLinux
+      InstanceType: !Ref TipoInstancia
+      SecurityGroupIds:
+        - !GetAtt GrupoSeguranca.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-api'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # `set -e` mais o trap abaixo: qualquer passo que falhe aborta o script
+          # e sinaliza erro ao CloudFormation, que marca CREATE_FAILED em vez de
+          # esperar o timeout. O log completo fica na instancia, em
+          # /var/log/cloud-init-output.log.
+          set -euxo pipefail
+
+          # O aws-cfn-bootstrap traz o cfn-signal, que o Amazon Linux 2023 nao
+          # instala por padrao.
+          dnf install -y docker aws-cfn-bootstrap
+          trap '/opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource InstanciaDemo --region ${AWS::Region}' EXIT
+
+          systemctl enable --now docker
+
+          # Rede propria para dar resolucao de nome entre os conteineres: a API
+          # alcanca o banco pelo host "postgres". A porta 5432 nao e publicada
+          # no host de proposito - o banco existe so para a API, e o grupo de
+          # seguranca abre apenas a 3000.
+          docker network create viajajunto
+
+          docker run -d --name postgres --network viajajunto --restart unless-stopped \
+            -e POSTGRES_USER=viajajunto \
+            -e POSTGRES_PASSWORD=viajajunto \
+            -e POSTGRES_DB=viajajunto \
+            postgres:16-alpine
+
+          # O Postgres leva alguns segundos para aceitar conexoes; sem esta
+          # espera o `migrate deploy` falha na primeira tentativa.
+          for i in $(seq 1 60); do
+            if docker exec postgres pg_isready -U viajajunto; then break; fi
+            sleep 2
+          done
+
+          docker pull ${ImagemBackend}:${TagImagem}
+
+          # O banco nasce vazio, entao as migrations rodam antes da API subir,
+          # num container efemero da propria imagem - ela carrega o schema e a
+          # pasta prisma/migrations justamente para isso. O runtime nao tem npm
+          # nem npx (o Dockerfile os remove), por isso o CLI do Prisma e
+          # chamado direto pelo node.
+          docker run --rm --network viajajunto \
+            -e DATABASE_URL="postgresql://viajajunto:viajajunto@postgres:5432/viajajunto?schema=public" \
+            ${ImagemBackend}:${TagImagem} \
+            node node_modules/prisma/build/index.js migrate deploy
+
+          # NODE_ENV=development de proposito. Em producao a validacao de
+          # ambiente (backend/src/config/validacao-env.ts) exige tambem
+          # RECUPERACAO_CODIGO_SECRET e as chaves do Brevo, e a API nem sobe sem
+          # elas; cadastrar um remetente de e-mail nao faz sentido para a demo.
+          # Em development essas variaveis caem num padrao e a API so avisa no
+          # log. O JWT_SECRET vem do parametro mesmo assim, para os tokens nao
+          # serem assinados com o segredo de desenvolvimento.
+          #
+          # CORS_ORIGIN='*' porque o padrao do codigo e http://localhost:3001,
+          # que nao existe aqui.
+          docker run -d --name backend --network viajajunto --restart unless-stopped \
+            -p 3000:3000 \
+            -e NODE_ENV=development \
+            -e PORT=3000 \
+            -e DATABASE_URL="postgresql://viajajunto:viajajunto@postgres:5432/viajajunto?schema=public" \
+            -e JWT_SECRET="${JwtSecret}" \
+            -e CORS_ORIGIN='*' \
+            ${ImagemBackend}:${TagImagem}
+
+          # Sinaliza sucesso so quando o /api/health responde, para a pilha
+          # chegar a CREATE_COMPLETE com a URL de saida ja no ar. Quem decide e
+          # o curl depois do laco: se o laco esgotar, ele falha, o trap sinaliza
+          # erro e a pilha nao fica "pronta" mentindo.
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/health; then break; fi
+            sleep 5
+          done
+          curl -fsS http://localhost:3000/api/health
+
+Outputs:
+
+  UrlSwagger:
+    Description: Documentacao interativa da API (Swagger UI).
+    Value: !Sub 'http://${InstanciaDemo.PublicDnsName}:3000/api/docs'
+
+  UrlHealth:
+    Description: >-
+      Health check publico. Responde "banco": "ok" quando as migrations foram
+      aplicadas e o Postgres esta no ar.
+    Value: !Sub 'http://${InstanciaDemo.PublicDnsName}:3000/api/health'
