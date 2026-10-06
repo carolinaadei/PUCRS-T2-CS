@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, StatusViagem } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { PaginacaoDto, RespostaPaginada } from '../../common/dto/paginacao.dto';
@@ -17,6 +22,11 @@ export class ViagensService {
 
   /** RF04 - cria a viagem gerando o codigo de convite usado no RF18. */
   async criar(usuarioId: number, dto: CriarViagemDto) {
+    const dataInicio = this.paraData(dto.dataInicio, 'inicio');
+    const dataFim = this.paraData(dto.dataFim, 'fim');
+
+    this.validarPeriodo(dataInicio, dataFim);
+
     // Colisao de codigo e improvavel, mas nao impossivel: tentamos novamente.
     for (let tentativa = 0; tentativa < MAX_TENTATIVAS_CODIGO; tentativa++) {
       try {
@@ -24,9 +34,9 @@ export class ViagensService {
           data: {
             id: this.gerarCodigoConvite(),
             nome: dto.nome.trim(),
-            descricao: dto.descricao,
-            dataInicio: dto.dataInicio ? new Date(dto.dataInicio) : null,
-            dataFim: dto.dataFim ? new Date(dto.dataFim) : null,
+            descricao: dto.descricao?.trim() || null,
+            dataInicio,
+            dataFim,
             status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,
             criadoPor: usuarioId,
           },
@@ -111,6 +121,36 @@ export class ViagensService {
   /** RF05 - excluir viagem (exige CRIADOR). Destinos, membros e orcamento caem em cascata. */
   async remover(viagemId: string) {
     await this.prisma.viagem.delete({ where: { id: viagemId } });
+  }
+
+  /**
+   * Converte a data recebida (aaaa-mm-dd) para UTC, de modo que o dia gravado
+   * na coluna DATE seja sempre o informado, independentemente do fuso do servidor.
+   */
+  private paraData(valor: string | undefined, campo: 'inicio' | 'fim'): Date | null {
+    if (!valor) {
+      return null;
+    }
+
+    const data = new Date(`${valor}T00:00:00.000Z`);
+
+    // Descarta dias inexistentes (ex.: 2027-02-31), que o Date normalizaria em silencio.
+    if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== valor) {
+      throw new BadRequestException(`A data de ${campo} informada nao existe no calendario`);
+    }
+
+    return data;
+  }
+
+  /** RF04 - as datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
+  private validarPeriodo(dataInicio: Date | null, dataFim: Date | null) {
+    if (dataFim && !dataInicio) {
+      throw new BadRequestException('Informe a data de inicio da viagem junto com a data de fim');
+    }
+
+    if (dataInicio && dataFim && dataFim < dataInicio) {
+      throw new BadRequestException('A data de fim nao pode ser anterior a data de inicio');
+    }
   }
 
   private gerarCodigoConvite(): string {
