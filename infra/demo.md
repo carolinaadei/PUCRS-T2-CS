@@ -109,7 +109,8 @@ o que o sinal significa.
 
 ## Passo 4 — Mostrar que funciona
 
-Vá na aba **Outputs**. Há dois links.
+Vá na aba **Outputs**, que traz dois links. Há um terceiro endereço, fora das
+saídas, que é o que realmente prova as migrations — veja abaixo.
 
 ### `UrlHealth` → `http://<dns-publico>:3000/api/health`
 
@@ -119,9 +120,34 @@ Abra primeiro. A resposta é:
 { "status": "ok", "banco": "ok", "timestamp": "2026-10-05T21:24:56.273Z" }
 ```
 
-**Aponte o `"banco": "ok"`.** É a prova de duas coisas de uma vez: o Postgres está
-no ar e as migrations foram aplicadas. Se o banco estivesse fora, este mesmo
-endpoint responderia `"status": "degradado"` — e continuaria devolvendo 200.
+**Aponte o `"banco": "ok"`.** Ele prova que a API alcança o Postgres pela rede
+interna do Docker. Se o banco estivesse fora, este mesmo endpoint responderia
+`"status": "degradado"` — e continuaria devolvendo 200.
+
+> **O que este endpoint *não* prova:** que as migrations rodaram. O health
+> executa um `SELECT 1`, que não toca em tabela nenhuma e funciona igual num
+> banco vazio. Verificado: com um Postgres sem nenhuma tabela, o `/api/health`
+> responde `"banco": "ok"` do mesmo jeito. Para as migrations, use o endereço
+> abaixo.
+
+### `<dns-publico>:3000/api/destinos` — a prova das migrations
+
+Não está nas saídas da pilha; digite na barra de endereço. A resposta é:
+
+```json
+{ "itens": [], "total": 0, "pagina": 1, "limite": 20 }
+```
+
+**É o `200` com lista vazia que importa**, não o conteúdo. Essa rota faz um
+`SELECT` numa tabela de verdade: se as migrations não tivessem rodado, a tabela
+não existiria e a resposta seria `500`. Lista vazia significa "a tabela existe e
+está sem dados" — que é exatamente o esperado, porque o modelo aplica as
+migrations mas não roda o seed.
+
+> **O banco sobe vazio.** O seed é TypeScript e depende do `ts-node`, que não
+> existe na imagem de runtime. Então toda listagem (`/api/destinos`,
+> `/api/atividades`) volta vazia. Se quiser mostrar dados, crie-os pela própria
+> API durante a demo — `POST /api/auth/registrar` funciona e devolve um token.
 
 ### `UrlSwagger` → `http://<dns-publico>:3000/api/docs`
 
@@ -129,12 +155,16 @@ A página do Swagger UI carrega com o contrato completo. Role pelas seções
 (Autenticação, Viagens, Orçamento, Colaboração…) para mostrar que é a API
 inteira, não um *hello world*.
 
-> **Cuidado:** o botão **Try it out** não funciona direto. O campo `servers` do
-> documento OpenAPI está fixo em `http://localhost:3000`
-> (`backend/src/config/swagger.ts`), então o botão aponta para a máquina de quem
-> abriu o navegador, não para a instância. Se quiser executar uma chamada ao
-> vivo, troque o servidor no seletor no topo da página antes. O roteiro acima não
-> depende disso.
+> **Cuidado:** o botão **Try it out** não funciona, e **não há como contornar na
+> página**. O `servers` do documento OpenAPI tem uma única entrada,
+> `http://localhost:3000` (`backend/src/config/swagger.ts`), então o botão aponta
+> para a máquina de quem abriu o navegador. Com um servidor só, o Swagger UI
+> mostra um seletor fixo — não existe campo editável para trocar pelo endereço da
+> instância. Corrigir isso exigiria alterar o `swagger.ts`, gerar uma imagem nova
+> e publicá-la pelo CI.
+>
+> Para mostrar a API respondendo ao vivo, use a barra de endereço do navegador:
+> `/api/health` e `/api/destinos` são `GET` públicos e abrem direto.
 
 ---
 

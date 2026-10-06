@@ -229,14 +229,22 @@ O modelo foi testado antes de ser commitado, não só escrito:
 | A sequência inteira de inicialização | Imagem construída do `backend/Dockerfile` e o script renderizado rodado localmente | 3 migrations aplicadas; `/api/health` → `{"status":"ok","banco":"ok"}`; `/api/docs` → 200 |
 | O `migrate deploy` na imagem real | Contêiner efêmero contra um Postgres novo | 3 migrations em ~8s, **sem** o binário do engine na imagem |
 | A dependência de internet | Rede Docker `--internal` | Falha com `EAI_AGAIN binaries.prisma.sh` — é o que prova o download sob demanda |
+| **A pilha de verdade, na AWS** | Pilha criada em `sa-east-1`, testada pela URL pública | `/api/health` 200 em 142 ms; `/api/docs` 200; `GET /api/destinos` 200; rota protegida → 401; cabeçalhos do helmet e `X-RateLimit` presentes |
+| O código no ar é o do repositório | `/api/docs-json` da instância comparado com `backend/openapi.json` | **Idêntico byte a byte**, 32 rotas |
+| O caminho de escrita e o JWT | `POST /api/auth/registrar` → `POST /api/auth/login` → `GET /api/usuarios/eu` com o token | 201, token de 196 chars, 200 — prova o `INSERT`, o bcrypt e o `JwtSecret` do parâmetro assinando de verdade |
+| O que o `/api/health` realmente prova | API apontada para um Postgres **sem nenhuma migration** | Responde `"banco":"ok"` mesmo assim, enquanto `/api/destinos` dá 500 |
 
-Dois achados do teste que mudaram o modelo:
+Achados dos testes que mudaram o modelo ou a documentação:
 
 - **O laço de espera no `/api/health` é necessário.** Na primeira tentativa o
   `curl` devolveu `Empty reply from server` — a porta já aceitava conexão, mas o
   Nest ainda estava subindo. Sem o laço, o sinal sairia como falha.
 - **O laço do `pg_isready` também.** Sem ele o `migrate deploy` erra na primeira
   tentativa.
+- **O `"banco":"ok"` não prova as migrations**, ao contrário do que esta
+  documentação afirmava. O health roda um `SELECT 1`, que funciona num banco
+  vazio. Quem prova o schema é qualquer rota que leia uma tabela, como o
+  `/api/destinos`. O roteiro em [`demo.md`](demo.md) foi corrigido.
 
 ---
 
@@ -252,14 +260,22 @@ Isto é um ambiente de demonstração. Nada aqui é adequado a produção:
   CloudFormation, não a instância.
 - **Porta 3000 aberta para a internet, sem TLS.**
 - **Sem acesso a log** (seção 5).
-- **O `Try it out` do Swagger não funciona**: o `servers` do documento OpenAPI
-  está fixo em `http://localhost:3000` em
-  [`backend/src/config/swagger.ts`](../backend/src/config/swagger.ts).
-- **O sinal de sucesso prova menos do que parece.** O `/api/health` responde 200
-  mesmo com o banco fora (`"status": "degradado"`), então o `curl -fsS` final
-  valida "a API responde", não "o banco responde". Na prática a janela é
-  estreita, porque o `migrate deploy` segundos antes já exerceu o banco. Para
-  fechá-la, bastaria encadear `| grep -q '"banco":"ok"'` no `curl` final.
+- **O `Try it out` do Swagger não funciona, e não há contorno pela página**: o
+  `servers` do documento OpenAPI tem uma única entrada, `http://localhost:3000`,
+  em [`backend/src/config/swagger.ts`](../backend/src/config/swagger.ts). Com um
+  servidor só, o Swagger UI mostra um seletor fixo, sem campo editável.
+- **O banco sobe vazio.** O modelo aplica as migrations, mas não roda o seed —
+  ele é TypeScript e depende do `ts-node`, que não está na imagem de runtime.
+  Toda listagem responde `200` com lista vazia.
+- **O sinal de sucesso prova menos do que parece.** O `curl -fsS` final valida
+  "a API responde", e só. O `/api/health` devolve 200 mesmo com o banco fora
+  (`"status": "degradado"`) — e, pior, devolve `"banco": "ok"` mesmo num banco
+  **sem nenhuma tabela**, porque o health roda um `SELECT 1`, que não toca em
+  tabela alguma (verificado contra um Postgres sem migrations). Na prática a
+  janela é estreita, porque o `migrate deploy` segundos antes já exerceu o
+  schema. Quem quiser fechá-la de verdade precisa checar uma rota que leia uma
+  tabela — `curl -fsS …/api/destinos` —, não o health nem um `grep` por
+  `"banco":"ok"`.
 
 ---
 
