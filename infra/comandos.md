@@ -1,202 +1,183 @@
 # Comandos — pilha local no MiniStack
 
-Como criar, exercitar e destruir a pilha do
+Receita para criar, exercitar e destruir a pilha do
 [`viajajunto-local.yaml`](viajajunto-local.yaml) no
-[MiniStack](https://ministack.org), um emulador local de serviços da AWS: MIT,
-sem cadastro e sem token.
+[MiniStack](https://ministack.org). Só precisa de Docker: nenhuma conta, nenhuma
+credencial, nenhuma AWS CLI instalada.
 
-**Só precisa de Docker.** Nenhuma credencial, nenhuma conta, nenhuma AWS CLI
-instalada — o serviço `aws` do [`ministack/compose.yml`](ministack/compose.yml)
-está num profile e já sai apontado para o emulador.
+Para entender *o que* esta pilha é, veja [`sobre-a-demo.md`](sobre-a-demo.md).
 
-Para entender *o que* esta pilha é e por que ela existe separada da demonstração
-na AWS, veja [`sobre-a-demo.md`](sobre-a-demo.md).
-
-> **PowerShell:** os blocos abaixo usam `\` para quebrar linha, que é sintaxe de
-> shell POSIX e **dá erro de parser no PowerShell**. Use o acento grave
-> (`` ` ``) no lugar, ou cole cada comando numa única linha. O resto é igual —
-> verificado: vírgula em `ParameterKey=…,ParameterValue=…` e colchetes em
-> `--query` passam sem aspas extras.
+> **No PowerShell**, troque o `\` do fim das linhas pelo acento grave (`` ` ``),
+> ou cole cada comando numa linha só. O `\` é sintaxe de shell POSIX e dá erro de
+> parser no PowerShell.
 
 ---
 
-## Subir o emulador
+## 1. Subir o emulador
 
 ```bash
+# entra na pasta do compose (a partir da raiz do repositorio)
 cd infra/ministack
+
+# sobe o MiniStack em background
 docker compose up -d
-docker compose ps          # espere STATUS = Up (healthy)
+
+# confirma que esta pronto - espere STATUS = Up (healthy)
+docker compose ps
 ```
 
-Todo comando daqui em diante é `docker compose run --rm aws <subcomando>`, de
-dentro de `infra/ministack`.
+Todos os comandos seguintes rodam de dentro de `infra/ministack`.
 
-## Criar a pilha
+## 2. Criar a pilha
 
 ```bash
+# cria a pilha a partir do modelo (o caminho /infra e o volume do compose)
 docker compose run --rm aws cloudformation create-stack \
   --stack-name viajajunto-local \
   --template-body file:///infra/viajajunto-local.yaml
-```
 
-```bash
+# le o status - deve virar CREATE_COMPLETE em ~20 segundos
 docker compose run --rm aws cloudformation describe-stacks \
   --stack-name viajajunto-local --query 'Stacks[0].StackStatus' --output text
-```
 
-→ `CREATE_COMPLETE` em cerca de 20 segundos.
-
-## Ver as saídas
-
-```bash
+# lista as seis saidas da pilha, com os nomes reais dos recursos
 docker compose run --rm aws cloudformation describe-stacks \
   --stack-name viajajunto-local \
   --query 'Stacks[0].Outputs[].[OutputKey,OutputValue]' --output text
 ```
 
-```
-NomeBucketMidia         viajajunto-local-midia
-UrlFilaNotificacoes     http://localhost:4566/000000000000/viajajunto-local-notificacoes
-ArnFilaDLQ              arn:aws:sqs:us-east-1:000000000000:viajajunto-local-notificacoes-dlq
-ReferenciaSegredoJwt    viajajunto/local/jwt
-NomeParametroCors       /viajajunto/local/CORS_ORIGIN
-NomeGrupoLogs           /viajajunto/local/api
-```
+## 3. Provar que os recursos são reais
 
-## Provar que os recursos são reais
-
-Não basta a pilha dizer `CREATE_COMPLETE`. Estes comandos usam os recursos:
+Não basta a pilha dizer `CREATE_COMPLETE` — estes comandos **usam** os recursos.
 
 ```bash
-# S3 — grava e lê
-docker compose run --rm aws s3api put-object --bucket viajajunto-local-midia \
+# grava um objeto no bucket de midia
+docker compose run --rm aws s3api put-object \
+  --bucket viajajunto-local-midia \
   --key fotos/gramado.jpg --body /infra/viajajunto-local.yaml
-docker compose run --rm aws s3api list-objects-v2 --bucket viajajunto-local-midia \
+
+# lista o que ha no bucket, com o tamanho de cada objeto
+docker compose run --rm aws s3api list-objects-v2 \
+  --bucket viajajunto-local-midia \
   --query 'Contents[].[Key,Size]' --output text
 
-# SQS — envia e recebe
-docker compose run --rm aws sqs send-message --message-body 'convite:viagem=42' \
+# descobre a URL da fila sem precisar decora-la
+docker compose run --rm aws sqs get-queue-url \
+  --queue-name viajajunto-local-notificacoes --query QueueUrl --output text
+
+# envia uma mensagem para a fila de notificacoes
+docker compose run --rm aws sqs send-message \
+  --message-body 'convite:viagem=42' \
   --queue-url http://ministack:4566/000000000000/viajajunto-local-notificacoes
+
+# recebe a mensagem de volta - deve sair exatamente o que foi enviado
 docker compose run --rm aws sqs receive-message --output text \
   --query 'Messages[0].Body' \
   --queue-url http://ministack:4566/000000000000/viajajunto-local-notificacoes
 
-# Secrets Manager — o segredo que o CloudFormation gerou
+# le o segredo que o CloudFormation GEROU (nao recebeu como parametro)
 docker compose run --rm aws secretsmanager get-secret-value \
   --secret-id viajajunto/local/jwt --query SecretString --output text
 
-# SSM — o parâmetro de configuração
+# le o parametro de configuracao nao-secreta
 docker compose run --rm aws ssm get-parameter \
   --name /viajajunto/local/CORS_ORIGIN --query Parameter.Value --output text
 
-# CloudWatch Logs — a retenção aplicada
+# mostra o grupo de logs e a retencao aplicada (retentionInDays: 7)
 docker compose run --rm aws logs describe-log-groups \
   --log-group-name-prefix /viajajunto/local --output json
 ```
 
-> A URL da fila tem **duas formas**: dentro da rede do Compose o host é
-> `ministack`; a saída da pilha traz `localhost`, que é a forma válida para quem
-> chama de fora do Docker. Os comandos acima rodam dentro da rede, por isso usam
-> `ministack`. Se não quiser decorar, use
-> `sqs get-queue-url --queue-name viajajunto-local-notificacoes`.
+> **A URL da fila tem duas formas.** Dentro da rede do Compose o host é
+> `ministack` — é a forma usada acima, porque os comandos rodam lá dentro. A
+> saída da pilha traz `localhost`, que vale para quem chama de fora do Docker.
 
-## A condição, pelos dois lados
-
-Mostra que a `Condition` do modelo é avaliada de verdade:
+## 4. Mostrar que a `Condition` é avaliada
 
 ```bash
-docker compose run --rm aws cloudformation create-stack --stack-name viajajunto-dev \
+# cria uma segunda pilha com Ambiente=dev, que liga o versionamento do bucket
+docker compose run --rm aws cloudformation create-stack \
+  --stack-name viajajunto-dev \
   --template-body file:///infra/viajajunto-local.yaml \
   --parameters ParameterKey=Ambiente,ParameterValue=dev
 
+# em dev a resposta e {"Status": "Enabled"}
 docker compose run --rm aws s3api get-bucket-versioning --bucket viajajunto-dev-midia
+
+# em local a resposta vem VAZIA - como a AWS representa bucket nunca versionado
 docker compose run --rm aws s3api get-bucket-versioning --bucket viajajunto-local-midia
 ```
 
-Em `dev` a resposta é `{"Status": "Enabled"}`; em `local` ela vem **vazia**, que é
-como a AWS representa um bucket nunca versionado.
-
-## Change set — a prévia antes de executar
+## 5. Change set — a prévia antes de executar
 
 ```bash
+# calcula o que mudaria ao trocar a retencao de 7 para 30 dias, sem aplicar nada
 docker compose run --rm aws cloudformation create-change-set \
   --stack-name viajajunto-local --change-set-name muda-retencao \
   --use-previous-template \
   --parameters ParameterKey=RetencaoLogsDias,ParameterValue=30
 
+# mostra o diff: dos seis recursos, o CloudFormation aponta exatamente um
+#   ->  GrupoLogsApi   Modify   Conditional
 docker compose run --rm aws cloudformation describe-change-set \
   --stack-name viajajunto-local --change-set-name muda-retencao \
   --query 'Changes[].ResourceChange.[LogicalResourceId,Action,Replacement]' --output text
-```
 
-```
-GrupoLogsApi	Modify	Conditional
-```
-
-O ponto é o **isolamento**: dos seis recursos da pilha, o CloudFormation aponta
-exatamente um. Para fechar o ciclo e provar que o update chega ao recurso:
-
-```bash
+# aplica o change set
 docker compose run --rm aws cloudformation execute-change-set \
   --stack-name viajajunto-local --change-set-name muda-retencao
 
+# prova que a mudanca chegou ao RECURSO: retentionInDays virou 30
 docker compose run --rm aws logs describe-log-groups \
   --log-group-name-prefix /viajajunto/local --output json
 ```
 
-O `retentionInDays` sai de `7` e vira `30` **no recurso**, não só no status da
-pilha.
+## 6. Mostrar que o modelo da AWS não roda aqui
 
-## Encerrar
-
-```bash
-docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-local
-docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-dev
-docker compose down
-```
-
-A exclusão leva os seis recursos junto, inclusive o bucket com objeto dentro. O
-estado do emulador é em memória, então `docker compose down` é o reset
-definitivo — instantâneo e repetível.
-
----
-
-## O modelo da AWS não roda aqui
-
-Aplicar o [`viajajunto-demo.yaml`](viajajunto-demo.yaml) no MiniStack falha, em
-duas barreiras. Vale rodar na apresentação, porque a mensagem de erro é o próprio
-conteúdo:
+Vale rodar na apresentação: a mensagem de erro é o próprio conteúdo.
 
 ```bash
+# tenta criar a pilha de EC2 no emulador - falha na PRIMEIRA barreira:
+#   ValidationError: Parameter 'AmiAmazonLinux' failed to resolve:
+#   SSM parameter '/aws/service/ami-amazon-linux-latest/...' does not exist
+docker compose run --rm aws cloudformation create-stack --stack-name demo \
+  --template-body file:///infra/viajajunto-demo.yaml \
+  --parameters ParameterKey=ImagemBackend,ParameterValue=exemplo/viajajunto-backend \
+               ParameterKey=JwtSecret,ParameterValue=abcdefghijklmnopqrstuvwxyz012345
+
+# semeia o parametro da AMI a mao, para passar da primeira barreira
+docker compose run --rm aws ssm put-parameter \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --type String --value ami-0abcdef1234567890 --overwrite
+
+# tenta de novo - agora falha na SEGUNDA barreira, que e a definitiva:
+#   ValidationError: Template format error:
+#   Unrecognized resource types: [AWS::EC2::Instance]
 docker compose run --rm aws cloudformation create-stack --stack-name demo \
   --template-body file:///infra/viajajunto-demo.yaml \
   --parameters ParameterKey=ImagemBackend,ParameterValue=exemplo/viajajunto-backend \
                ParameterKey=JwtSecret,ParameterValue=abcdefghijklmnopqrstuvwxyz012345
 ```
 
-Primeiro:
+O porquê está na seção 3 do [`sobre-a-demo.md`](sobre-a-demo.md).
 
-```
-ValidationError: Parameter 'AmiAmazonLinux' failed to resolve: SSM parameter
-'/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
-does not exist
-```
+## 7. Limpar
 
-E se você semear o parâmetro à mão com `ssm put-parameter`, a segunda:
+```bash
+# exclui as duas pilhas - leva os recursos junto, inclusive o bucket com objeto
+docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-local
+docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-dev
 
+# derruba o emulador - o estado e em memoria, entao isto zera tudo
+docker compose down
 ```
-ValidationError: Template format error: Unrecognized resource types:
-[AWS::EC2::Instance]
-```
-
-O porquê está em [`sobre-a-demo.md`](sobre-a-demo.md).
 
 ---
 
 ## Divergências medidas no MiniStack 1.5.22
 
-Três coisas em que o emulador difere da AWS. Nenhuma impede a demonstração, mas
-não vale afirmar o contrário na frente da turma:
+Três pontos em que o emulador difere da AWS. Nenhum impede a demonstração, mas
+não vale afirmar o contrário na frente da turma.
 
 | O que | No MiniStack | Na AWS real |
 | --- | --- | --- |
