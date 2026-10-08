@@ -1,15 +1,6 @@
 # Comandos — pilha local no MiniStack
 
-Receita para criar, exercitar e destruir a pilha do
-[`viajajunto-local.yaml`](viajajunto-local.yaml) no
-[MiniStack](https://ministack.org). Só precisa de Docker: nenhuma conta, nenhuma
-credencial, nenhuma AWS CLI instalada.
-
 Para entender *o que* esta pilha é, veja [`sobre-a-demo.md`](sobre-a-demo.md).
-
-> **No PowerShell**, troque o `\` do fim das linhas pelo acento grave (`` ` ``),
-> ou cole cada comando numa linha só. O `\` é sintaxe de shell POSIX e dá erro de
-> parser no PowerShell.
 
 ---
 
@@ -161,7 +152,35 @@ docker compose run --rm aws cloudformation create-stack --stack-name demo \
 
 O porquê está na seção 3 do [`sobre-a-demo.md`](sobre-a-demo.md).
 
-## 7. Limpar
+## 7. URLs para abrir no navegador
+
+Estas quatro funcionam com a pilha criada (seção 2) e o objeto gravado (seção 3).
+Todas testadas, todas devolvem `200`:
+
+| URL | O que mostrar para a turma |
+| --- | --- |
+| `http://localhost:4566/_ministack/health` | JSON com os **89 serviços** que o emulador oferece. Abra primeiro: prova que o MiniStack está no ar. |
+| `http://localhost:4566/` | XML `ListAllMyBucketsResult` — o bucket que **o CloudFormation** criou, com nome, região e ARN. |
+| `http://localhost:4566/viajajunto-local-midia` | XML `ListBucketResult` — a chave `fotos/gramado.jpg`, o `Size` e o `ETag`. |
+| `http://localhost:4566/viajajunto-local-midia/fotos/gramado.jpg` | O **arquivo em si**, baixado pelo navegador. Verificado: 5285 bytes, idêntico byte a byte ao original. |
+
+A última é a mais forte: um recurso declarado em YAML, servindo um arquivo de
+verdade por HTTP, sem conta na AWS.
+
+```bash
+# alternativa pelo terminal, se preferir nao sair do shell
+curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/viajajunto-local-midia
+```
+
+> **O que NÃO abre no navegador:** a fila (dá `404`), o segredo e o parâmetro do
+> SSM. Eles exigem requisição assinada — use os comandos da seção 3.
+>
+> **Esta pilha não sobe API nenhuma.** As URLs do Swagger, do `/api/health` e do
+> `/api/destinos` são da demonstração na AWS real: veja a seção 6 do
+> [`sobre-a-demo.md`](sobre-a-demo.md).
+
+## 8. Limpar
 
 ```bash
 # exclui as duas pilhas - leva os recursos junto, inclusive o bucket com objeto
@@ -171,20 +190,3 @@ docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-
 # derruba o emulador - o estado e em memoria, entao isto zera tudo
 docker compose down
 ```
-
----
-
-## Divergências medidas no MiniStack 1.5.22
-
-Três pontos em que o emulador difere da AWS. Nenhum impede a demonstração, mas
-não vale afirmar o contrário na frente da turma.
-
-| O que | No MiniStack | Na AWS real |
-| --- | --- | --- |
-| `ExcludePunctuation: true` | **Ignorado** — o segredo vem com `" # $ % ' + , - ; < ] { ~` | Respeitado |
-| `!Ref` num `SecretsManager::Secret` | Devolve o **nome** (`viajajunto/local/jwt`) | Devolve o ARN |
-| `Replacement` no change set | `Conditional` | `False` (`RetentionInDays` é *"No interruption"*) |
-
-> A pontuação no segredo tem efeito prático: o valor pode conter acento grave,
-> que num comando PowerShell é caractere de escape. Use **aspas simples** ao
-> passá-lo adiante.
