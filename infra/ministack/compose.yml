@@ -1,8 +1,9 @@
 # Ambiente MiniStack para exercitar o CloudFormation sem conta na AWS.
 #
 # O MiniStack (https://ministack.org) e um emulador local de servicos da AWS,
-# MIT, sem cadastro e sem token. O servico `aws` nao sobe com `up`: esta num
-# profile e so roda via `run --rm`, para ninguem precisar instalar a AWS CLI.
+# MIT, sem cadastro e sem token. O servico `setup` roda automaticamente com `up`
+# para provisionar a infraestrutura completa, e o servico `aws` fica disponivel
+# via `run --rm` para comandos manuais adicionais.
 name: viajajunto-ministack
 
 services:
@@ -14,6 +15,66 @@ services:
     ports:
       # Porta do host configuravel, como a do Postgres no backend/docker-compose.yml.
       - '${MINISTACK_PORT:-4566}:4566'
+
+  # Servico executado automaticamente ao rodar `docker compose up`
+  setup:
+    image: amazon/aws-cli:latest
+    depends_on:
+      ministack:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://ministack:4566
+      AWS_PAGER: ''
+    volumes:
+      - ..:/infra:ro
+    working_dir: /infra
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -e
+        echo "=========================================================="
+        echo "--> Provisionando a infraestrutura via CloudFormation..."
+        echo "=========================================================="
+
+        # Cria a pilha local (com os 6 recursos da infraestrutura)
+        if ! aws cloudformation describe-stacks --stack-name viajajunto-local >/dev/null 2>&1; then
+          echo "--> [1/3] Criando a stack viajajunto-local..."
+          aws cloudformation create-stack \
+            --stack-name viajajunto-local \
+            --template-body file:///infra/viajajunto-local.yaml
+          
+          echo "--> [2/3] Aguardando a conclusao do CloudFormation..."
+          aws cloudformation wait stack-create-complete --stack-name viajajunto-local
+          echo "--> Stack viajajunto-local criada com sucesso!"
+        else
+          echo "--> A stack viajajunto-local ja existe."
+        fi
+
+        # Grava o objeto de teste no bucket S3
+        echo "--> [3/3] Semeando fotos/gramado.jpg no bucket S3..."
+        aws s3api put-object \
+          --bucket viajajunto-local-midia \
+          --key fotos/gramado.jpg \
+          --body /infra/viajajunto-local.yaml >/dev/null
+
+        echo ""
+        echo "=========================================================="
+        echo " Os 6 recursos da stack foram provisionados com sucesso:"
+        echo "=========================================================="
+        aws cloudformation list-stack-resources \
+          --stack-name viajajunto-local \
+          --query "StackResourceSummaries[].[LogicalResourceId,ResourceType,ResourceStatus]" \
+          --output table
+        echo ""
+        echo "Saidas da stack (Outputs):"
+        aws cloudformation describe-stacks \
+          --stack-name viajajunto-local \
+          --query "Stacks[0].Outputs[].[OutputKey,OutputValue]" \
+          --output table
 
   aws:
     image: amazon/aws-cli:latest
