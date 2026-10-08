@@ -125,7 +125,7 @@ docker compose run --rm aws logs describe-log-groups \
 
 ## 6. Mostrar que o modelo da AWS não roda aqui
 
-Vale rodar na apresentação: a mensagem de erro é o próprio conteúdo.
+A mensagem de erro é o próprio conteúdo.
 
 ```bash
 # tenta criar a pilha de EC2 no emulador - falha na PRIMEIRA barreira:
@@ -169,8 +169,9 @@ verdade por HTTP, sem conta na AWS.
 
 ```bash
 # alternativa pelo terminal, se preferir nao sair do shell
-curl http://localhost:4566/_ministack/health
-curl http://localhost:4566/viajajunto-local-midia
+# o -s tira a barra de progresso, que poluiria a tela na apresentacao
+curl -s http://localhost:4566/_ministack/health
+curl -s http://localhost:4566/viajajunto-local-midia
 ```
 
 > **O que NÃO abre no navegador:** a fila (dá `404`), o segredo e o parâmetro do
