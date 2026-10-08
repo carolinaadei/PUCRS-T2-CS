@@ -1,0 +1,3 @@
+# Scripts de shell rodam dentro de conteineres Linux: com CRLF (checkout no
+# Windows) o sh falha na primeira linha. Forca LF no working tree.
+*.sh text eol=lf

@@ -1,19 +1,46 @@
 # Ambiente MiniStack para exercitar o CloudFormation sem conta na AWS.
 #
 # O MiniStack (https://ministack.org) e um emulador local de servicos da AWS,
-# MIT, sem cadastro e sem token. O servico `aws` nao sobe com `up`: esta num
-# profile e so roda via `run --rm`, para ninguem precisar instalar a AWS CLI.
+# MIT, sem cadastro e sem token.
+#
+# `docker compose up -d --wait` sobe o emulador E cria as pilhas: o script em
+# init/ roda sozinho no boot (gancho ready.d) e o --wait so devolve o terminal
+# quando ele termina. O servico `aws` nao sobe com `up`: esta num profile e so
+# roda via `run --rm`, para os comandos ao vivo da demonstracao sem ninguem
+# precisar instalar a AWS CLI.
 name: viajajunto-ministack
 
 services:
   ministack:
     # Tag fixa, e nao "latest", para a demonstracao nao quebrar sozinha quando
-    # uma versao nova sair. A imagem ja traz HEALTHCHECK proprio, por isso este
-    # arquivo nao define um.
+    # uma versao nova sair.
     image: ministackorg/ministack:1.5.22
     ports:
       # Porta do host configuravel, como a do Postgres no backend/docker-compose.yml.
       - '${MINISTACK_PORT:-4566}:4566'
+    volumes:
+      # O script de init le os modelos daqui.
+      - ..:/infra:ro
+      # Scripts .sh daqui rodam assim que o emulador aceita conexoes.
+      - ./init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      # Substitui o HEALTHCHECK da imagem, que olha /_ministack/health - esse
+      # fica 200 antes de o script de init criar as pilhas. O /_ministack/ready
+      # so fica 200 depois, entao "healthy" aqui quer dizer "pilhas prontas".
+      # Mas ele vira 200 tambem quando o script FALHA (status "completed" conta
+      # erros), por isso o teste exige failed == 0: com erro, o conteiner nunca
+      # fica healthy e o `up --wait` sai com falha em vez de mentir.
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import json, urllib.request as r; s = json.load(r.urlopen('http://localhost:4566/_ministack/ready')); exit(s['failed'])",
+        ]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 24
 
   aws:
     image: amazon/aws-cli:latest

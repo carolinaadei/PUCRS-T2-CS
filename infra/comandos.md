@@ -4,30 +4,34 @@ Para entender *o que* esta pilha é, veja [`sobre-a-demo.md`](sobre-a-demo.md).
 
 ---
 
-## 1. Subir o emulador
+## 1. Subir tudo
 
 ```bash
 # entra na pasta do compose (a partir da raiz do repositorio)
 cd infra/ministack
 
-# sobe o MiniStack em background
-docker compose up -d
-
-# confirma que esta pronto - espere STATUS = Up (healthy)
-docker compose ps
+# sobe o MiniStack E cria as pilhas - o --wait so devolve o terminal pronto
+docker compose up -d --wait
 ```
 
-Todos os comandos seguintes rodam de dentro de `infra/ministack`.
+Um comando só. Quando ele volta (cerca de 10 segundos), já existem:
 
-## 2. Criar a pilha
+- as pilhas `viajajunto-local` e `viajajunto-dev` em `CREATE_COMPLETE`;
+- o objeto `fotos/gramado.jpg` no bucket `viajajunto-local-midia`.
+
+Quem faz isso é o [`init/01-cria-pilhas.sh`](ministack/init/01-cria-pilhas.sh),
+que o próprio MiniStack roda no boot (gancho `ready.d`, o mesmo do LocalStack).
+O healthcheck do compose olha o `/_ministack/ready`, que só responde `200`
+depois que o script termina sem erro. Se o script falhar, o `up --wait` sai com
+`container ... is unhealthy` e o motivo aparece em `docker compose logs ministack`.
+
+O estado é em memória: todo `up` depois de um `down` começa vazio e o script
+recria tudo. Todos os comandos seguintes rodam de dentro de `infra/ministack`.
+
+## 2. Conferir a pilha
 
 ```bash
-# cria a pilha a partir do modelo (o caminho /infra e o volume do compose)
-docker compose run --rm aws cloudformation create-stack \
-  --stack-name viajajunto-local \
-  --template-body file:///infra/viajajunto-local.yaml
-
-# le o status - deve virar CREATE_COMPLETE em ~20 segundos
+# le o status - ja deve estar CREATE_COMPLETE
 docker compose run --rm aws cloudformation describe-stacks \
   --stack-name viajajunto-local --query 'Stacks[0].StackStatus' --output text
 
@@ -42,12 +46,7 @@ docker compose run --rm aws cloudformation describe-stacks \
 Não basta a pilha dizer `CREATE_COMPLETE` — estes comandos **usam** os recursos.
 
 ```bash
-# grava um objeto no bucket de midia
-docker compose run --rm aws s3api put-object \
-  --bucket viajajunto-local-midia \
-  --key fotos/gramado.jpg --body /infra/viajajunto-local.yaml
-
-# lista o que ha no bucket, com o tamanho de cada objeto
+# lista o que ha no bucket - o fotos/gramado.jpg gravado no boot, com o tamanho
 docker compose run --rm aws s3api list-objects-v2 \
   --bucket viajajunto-local-midia \
   --query 'Contents[].[Key,Size]' --output text
@@ -85,13 +84,10 @@ docker compose run --rm aws logs describe-log-groups \
 
 ## 4. Mostrar que a `Condition` é avaliada
 
-```bash
-# cria uma segunda pilha com Ambiente=dev, que liga o versionamento do bucket
-docker compose run --rm aws cloudformation create-stack \
-  --stack-name viajajunto-dev \
-  --template-body file:///infra/viajajunto-local.yaml \
-  --parameters ParameterKey=Ambiente,ParameterValue=dev
+O boot cria duas pilhas do mesmo modelo: `viajajunto-local` e `viajajunto-dev`
+(com `Ambiente=dev`, que liga o versionamento do bucket).
 
+```bash
 # em dev a resposta e {"Status": "Enabled"}
 docker compose run --rm aws s3api get-bucket-versioning --bucket viajajunto-dev-midia
 
@@ -154,7 +150,7 @@ O porquê está na seção 3 do [`sobre-a-demo.md`](sobre-a-demo.md).
 
 ## 7. URLs para abrir no navegador
 
-Estas quatro funcionam com a pilha criada (seção 2) e o objeto gravado (seção 3).
+Estas quatro funcionam logo depois do `up` da seção 1, que já cria a pilha e grava o objeto.
 Todas testadas, todas devolvem `200`:
 
 | URL | O que mostrar para a turma |
@@ -184,10 +180,15 @@ curl -s http://localhost:4566/viajajunto-local-midia
 ## 8. Limpar
 
 ```bash
+# derruba o emulador - o estado e em memoria, entao isto zera tudo
+docker compose down
+```
+
+Opcional, para mostrar que o CloudFormation também apaga o que criou, antes do
+`down`:
+
+```bash
 # exclui as duas pilhas - leva os recursos junto, inclusive o bucket com objeto
 docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-local
 docker compose run --rm aws cloudformation delete-stack --stack-name viajajunto-dev
-
-# derruba o emulador - o estado e em memoria, entao isto zera tudo
-docker compose down
 ```
