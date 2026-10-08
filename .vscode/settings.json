@@ -1,0 +1,35 @@
+{
+  // As tags curtas do CloudFormation (!Ref, !Sub, !GetAtt, !Equals, !If...) nao
+  // fazem parte do YAML padrao, entao a extensao YAML as marca como
+  // "Unresolved tag" em todo o infra/. Declarar aqui o tipo de cada uma faz o
+  // editor entende-las. Nao muda nada para o CloudFormation - e so o linter.
+  //
+  // O sufixo indica a forma que a tag aceita:
+  //   scalar   -> !Ref Recurso
+  //   sequence -> !Equals [a, b]
+  //   mapping  -> !Sub {Template: ..., Variables: ...}
+  // !GetAtt aparece nas duas formas (!GetAtt A.B e !GetAtt [A, B]).
+  "yaml.customTags": [
+    "!Ref scalar",
+    "!Sub scalar",
+    "!Sub sequence",
+    "!GetAtt scalar",
+    "!GetAtt sequence",
+    "!GetAZs scalar",
+    "!ImportValue scalar",
+    "!Base64 scalar",
+    "!Base64 mapping",
+    "!Cidr sequence",
+    "!Join sequence",
+    "!Split sequence",
+    "!Select sequence",
+    "!FindInMap sequence",
+    "!Transform mapping",
+    "!If sequence",
+    "!Equals sequence",
+    "!And sequence",
+    "!Or sequence",
+    "!Not sequence",
+    "!Condition scalar"
+  ]
+}
