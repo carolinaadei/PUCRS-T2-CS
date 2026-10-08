@@ -7,7 +7,7 @@ Description: >-
   tipos que o MiniStack reconhece.
 
   Este modelo NAO sobe a API: quem faz isso e o viajajunto-demo.yaml, na AWS
-  real. Os papeis estao separados de proposito - veja infra/local.md.
+  real. Os papeis estao separados de proposito - veja infra/sobre-a-demo.md.
 
 Parameters:
 
@@ -70,11 +70,11 @@ Resources:
         deadLetterTargetArn: !GetAtt FilaNotificacoesDLQ.Arn
         maxReceiveCount: 3
 
-  # Este recurso responde a uma limitacao registrada na secao 7 do fluxo.md: no
-  # viajajunto-demo.yaml o JwtSecret entra como parametro e acaba legivel no
-  # user-data da instancia, apesar do NoEcho. Aqui o segredo e GERADO pelo
-  # proprio CloudFormation - nunca existe em texto no modelo, no comando de
-  # criacao da pilha, nem no historico do shell de quem criou.
+  # Este recurso responde a uma limitacao registrada na secao 9 do
+  # sobre-a-demo.md: no viajajunto-demo.yaml o JwtSecret entra como parametro e
+  # acaba legivel no user-data da instancia, apesar do NoEcho. Aqui o segredo e
+  # GERADO pelo proprio CloudFormation - nunca existe em texto no modelo, no
+  # comando de criacao da pilha, nem no historico do shell de quem criou.
   SegredoJwt:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -85,7 +85,7 @@ Resources:
         # A API usa o valor como string pura; pontuacao so complica o transporte
         # por variavel de ambiente. ATENCAO: o MiniStack 1.5.22 ignora esta
         # propriedade e gera o segredo com pontuacao mesmo assim (medido - veja
-        # local.md). Quem consumir o valor num shell precisa aspas.
+        # comandos.md). Quem consumir o valor num shell precisa aspas.
         ExcludePunctuation: true
 
   # Configuracao nao-secreta fica no Parameter Store, nao no Secrets Manager: a
@@ -123,7 +123,7 @@ Outputs:
       Identificador do segredo. O valor NAO sai aqui de proposito; leia com
       "secretsmanager get-secret-value --secret-id viajajunto/<ambiente>/jwt".
       O nome da saida e generico porque !Ref diverge entre os ambientes: na AWS
-      real devolve o ARN, e o MiniStack devolve o nome (medido - veja local.md).
+      real devolve o ARN, e o MiniStack devolve o nome (medido - veja comandos.md).
     Value: !Ref SegredoJwt
 
   NomeParametroCors:
