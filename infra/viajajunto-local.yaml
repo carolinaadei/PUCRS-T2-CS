@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  Infraestrutura de apoio do ViajaJunto, para rodar no MiniStack. Declara os
+  recursos gerenciados que a API consumiria fora da instancia - armazenamento de
+  midia, fila de notificacoes, segredo, configuracao e logs - usando apenas
+  tipos que o MiniStack reconhece.
+
+  Este modelo NAO sobe a API: quem faz isso e o viajajunto-demo.yaml, na AWS
+  real. Os papeis estao separados de proposito - veja infra/local.md.
+
+Parameters:
+
+  Ambiente:
+    Type: String
+    Description: >-
+      Prefixo dos nomes dos recursos. Permite duas pilhas na mesma conta sem
+      colisao de nome - o bucket e a fila levam o valor no nome.
+    Default: local
+    AllowedValues:
+      - local
+      - dev
+
+  RetencaoLogsDias:
+    Type: Number
+    Description: >-
+      Dias de retencao do grupo de logs. E o parametro usado no passo do
+      conjunto de alteracoes: mudar o valor modifica um recurso sem recriar
+      nenhum, e o MiniStack aplica a mudanca de verdade no recurso.
+    Default: 7
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90]
+
+Conditions:
+
+  # Versionamento custa armazenamento e nao agrega nada a um ambiente
+  # descartavel; em "dev" ele fica ligado. Serve tambem para mostrar Conditions,
+  # que o MiniStack avalia corretamente nos dois sentidos (medido).
+  EhDescartavel: !Equals [!Ref Ambiente, local]
+
+Resources:
+
+  # As colunas foto_url de DestinoCatalogo e CatalogoAtividade
+  # (backend/prisma/schema.prisma) hoje guardam URLs externas. Este bucket e
+  # onde essas imagens ficariam se o projeto passasse a hospeda-las.
+  BucketMidia:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'viajajunto-${Ambiente}-midia'
+      VersioningConfiguration:
+        Status: !If [EhDescartavel, Suspended, Enabled]
+
+  # Fila de mensagens mortas, declarada antes da fila principal porque esta a
+  # referencia por GetAtt - e a dependencia que faz o CloudFormation ordenar a
+  # criacao sozinho, sem DependsOn explicito.
+  FilaNotificacoesDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'viajajunto-${Ambiente}-notificacoes-dlq'
+      MessageRetentionPeriod: 1209600
+
+  # Os modulos mail e notificacoes (backend/src/modules) hoje enviam de forma
+  # sincrona, dentro do request. Uma fila e o passo seguinte: o envio falhar
+  # para de derrubar a resposta da API.
+  FilaNotificacoes:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'viajajunto-${Ambiente}-notificacoes'
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FilaNotificacoesDLQ.Arn
+        maxReceiveCount: 3
+
+  # Este recurso responde a uma limitacao registrada na secao 7 do fluxo.md: no
+  # viajajunto-demo.yaml o JwtSecret entra como parametro e acaba legivel no
+  # user-data da instancia, apesar do NoEcho. Aqui o segredo e GERADO pelo
+  # proprio CloudFormation - nunca existe em texto no modelo, no comando de
+  # criacao da pilha, nem no historico do shell de quem criou.
+  SegredoJwt:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'viajajunto/${Ambiente}/jwt'
+      Description: Segredo de assinatura dos tokens JWT, gerado na criacao da pilha.
+      GenerateSecretString:
+        PasswordLength: 48
+        # A API usa o valor como string pura; pontuacao so complica o transporte
+        # por variavel de ambiente. ATENCAO: o MiniStack 1.5.22 ignora esta
+        # propriedade e gera o segredo com pontuacao mesmo assim (medido - veja
+        # local.md). Quem consumir o valor num shell precisa aspas.
+        ExcludePunctuation: true
+
+  # Configuracao nao-secreta fica no Parameter Store, nao no Secrets Manager: a
+  # separacao entre os dois e o que o modelo demonstra aqui.
+  ParametroCorsOrigin:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/CORS_ORIGIN'
+      Type: String
+      Value: 'http://localhost:3001'
+      Description: Origem aceita pelo CORS da API (backend/src/main.ts).
+
+  GrupoLogsApi:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/viajajunto/${Ambiente}/api'
+      RetentionInDays: !Ref RetencaoLogsDias
+
+Outputs:
+
+  NomeBucketMidia:
+    Description: Bucket de midia. Aceita upload e listagem no MiniStack.
+    Value: !Ref BucketMidia
+
+  UrlFilaNotificacoes:
+    Description: URL da fila principal. Aceita send-message e receive-message.
+    Value: !Ref FilaNotificacoes
+
+  ArnFilaDLQ:
+    Description: ARN da fila de mensagens mortas, para onde vao as 4a tentativas.
+    Value: !GetAtt FilaNotificacoesDLQ.Arn
+
+  ReferenciaSegredoJwt:
+    Description: >-
+      Identificador do segredo. O valor NAO sai aqui de proposito; leia com
+      "secretsmanager get-secret-value --secret-id viajajunto/<ambiente>/jwt".
+      O nome da saida e generico porque !Ref diverge entre os ambientes: na AWS
+      real devolve o ARN, e o MiniStack devolve o nome (medido - veja local.md).
+    Value: !Ref SegredoJwt
+
+  NomeParametroCors:
+    Description: Caminho do parametro no SSM Parameter Store.
+    Value: !Ref ParametroCorsOrigin
+
+  NomeGrupoLogs:
+    Description: Grupo de logs da API.
+    Value: !Ref GrupoLogsApi

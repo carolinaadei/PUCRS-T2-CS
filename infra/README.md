@@ -1,5 +1,20 @@
 # Infraestrutura
 
+Dois modelos de CloudFormation, com papéis distintos:
+
+| Modelo | Onde roda | Papel |
+| --- | --- | --- |
+| [`viajajunto-demo.yaml`](viajajunto-demo.yaml) | AWS real | Sobe a API da imagem publicada pelo CI, numa EC2. O valor dele é a API respondendo. |
+| [`viajajunto-local.yaml`](viajajunto-local.yaml) | MiniStack | Exercita o ciclo do CloudFormation sem conta, credencial ou custo. Detalhes em [`local.md`](local.md). |
+
+O modelo da demonstração **não roda no MiniStack**: o emulador recusa o template
+com `Unrecognized resource types: [AWS::EC2::Instance]` e não cria pilha nenhuma.
+Isso é o comportamento desejado — ele cobre serviços gerenciados, não a máquina
+virtual que você provisiona. O motivo e as medições estão na seção 1 do
+[`local.md`](local.md).
+
+---
+
 ## `viajajunto-demo.yaml` — ambiente de demonstração da API
 
 O CI já publica a imagem do backend no Docker Hub, mas nenhum passo a sobe em
@@ -10,6 +25,7 @@ demonstração da API na AWS a partir da imagem publicada.
 | --- | --- |
 | [`demo.md`](demo.md) | Passo a passo da apresentação: o que clicar, o que abrir e o que mostrar |
 | [`fluxo.md`](fluxo.md) | Como a implementação funciona: a sequência de inicialização e as decisões por trás dela |
+| [`local.md`](local.md) | O ambiente MiniStack: por que ele é um modelo separado, o que prova e o que não prova |
 
 ### O que a pilha cria
 
@@ -52,3 +68,32 @@ minutos, e o log completo da inicialização fica na instância, em
 > `AWS::IAM::InstanceProfile`.
 
 A tabela de sintomas e causas comuns está no final do [`demo.md`](demo.md).
+
+---
+
+## `viajajunto-local.yaml` — ambiente MiniStack
+
+Mesmo CloudFormation, outro alvo: um emulador local, sem conta na AWS, sem
+credencial e sem custo. Serve para exercitar o ciclo completo — criar, prever
+com change set, alterar, excluir — quantas vezes for preciso, inclusive offline.
+
+### O que a pilha cria
+
+| Recurso | Papel |
+| --- | --- |
+| `AWS::S3::Bucket` | Onde as imagens de destinos e atividades ficariam (as colunas `foto_url` do schema hoje guardam URLs externas). |
+| `AWS::SQS::Queue` (× 2) | Fila de notificações e sua DLQ, ligadas por `RedrivePolicy`. |
+| `AWS::SecretsManager::Secret` | O `JWT_SECRET`, **gerado** pelo CloudFormation em vez de recebido como parâmetro. |
+| `AWS::SSM::Parameter` | `CORS_ORIGIN` — configuração não-secreta, separada do segredo. |
+| `AWS::Logs::LogGroup` | Logs da API. |
+
+Como rodar, o que cada passo prova e os achados das medições estão em
+[`local.md`](local.md).
+
+### O que ele não prova
+
+Que o modelo funciona na AWS. Ele prova que o CloudFormation aceita o modelo e
+que o emulador cria os recursos — cotas, IAM e diferenças de comportamento ficam
+de fora. E a API **não consome** nada do que a pilha cria: o backend não tem
+nenhum SDK da AWS entre suas dependências. É a infraestrutura da próxima etapa
+da arquitetura, validada antes de o código existir.

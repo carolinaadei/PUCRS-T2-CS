@@ -1,0 +1,37 @@
+# Ambiente MiniStack para exercitar o CloudFormation sem conta na AWS.
+#
+# O MiniStack (https://ministack.org) e um emulador local de servicos da AWS,
+# MIT, sem cadastro e sem token. O servico `aws` nao sobe com `up`: esta num
+# profile e so roda via `run --rm`, para ninguem precisar instalar a AWS CLI.
+name: viajajunto-ministack
+
+services:
+  ministack:
+    # Tag fixa, e nao "latest", para a demonstracao nao quebrar sozinha quando
+    # uma versao nova sair. A imagem ja traz HEALTHCHECK proprio, por isso este
+    # arquivo nao define um.
+    image: ministackorg/ministack:1.5.22
+    ports:
+      # Porta do host configuravel, como a do Postgres no backend/docker-compose.yml.
+      - '${MINISTACK_PORT:-4566}:4566'
+
+  aws:
+    image: amazon/aws-cli:latest
+    profiles: [cli]
+    depends_on:
+      ministack:
+        condition: service_healthy
+    environment:
+      # O MiniStack nao valida credenciais, mas a CLI se recusa a assinar sem
+      # elas. Qualquer valor serve.
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      # Sem isto a CLI abre o pager e trava o terminal esperando um "q".
+      AWS_PAGER: ''
+    # Todo comando ja sai apontado para o emulador: o que vem depois do
+    # `run --rm aws` e so o subcomando (ex.: cloudformation describe-stacks).
+    entrypoint: ['aws', '--endpoint-url', 'http://ministack:4566']
+    volumes:
+      - ..:/infra:ro
+    working_dir: /infra

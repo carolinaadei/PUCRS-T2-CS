@@ -178,16 +178,37 @@ Este é o passo que mostra o valor do CloudFormation além de "criar coisas".
    Create change set**
 4. Dê um nome (`troca-tipo-instancia`) e confirme.
 
-Quando o change set terminar de calcular, abra a aba **Changes** e aponte a coluna
-**Replacement**:
+Quando o change set terminar de calcular, abra a aba **Changes** e aponte a
+coluna **Replacement**:
 
 | Logical ID | Action | Replacement |
 | --- | --- | --- |
-| `InstanciaDemo` | `Modify` | **`True`** |
+| `InstanciaDemo` | `Modify` | `False` |
 
-`Replacement: True` significa que a instância seria **destruída e recriada** —
-trocar o tipo não é uma alteração no lugar. A frase a dizer é essa: *"o
-CloudFormation me diz o que vai acontecer antes de eu deixar acontecer."*
+`Replacement: False` aqui significa **parada e religada, não recriada**: a
+documentação da AWS marca `InstanceType` como *"Update requires: Some
+interruptions"*. A instância mantém o volume, o ID e os dados; ela só reinicia.
+
+A frase a dizer é essa: *"o CloudFormation me diz o que vai acontecer antes de
+eu deixar acontecer."* O valor do passo não é a palavra `True` — é a pilha
+responder **qual** das três consequências possíveis o meu parâmetro provoca:
+
+| Se eu mudar… | A AWS faz | `Replacement` |
+| --- | --- | --- |
+| `TipoInstancia` | Para e religa a instância | `False` |
+| `AmiAmazonLinux` | Destrói e recria do zero | `True` |
+
+A segunda linha vem da documentação da AWS, que marca `ImageId` como *"Update
+requires: Replacement"* — ela não foi exercitada numa pilha real, ao contrário da
+primeira. Se quiser mostrar as duas ao vivo, crie um segundo change set trocando
+só o `AmiAmazonLinux` por outro caminho de AMI válido.
+
+> **Não anuncie `Replacement: True` para a troca de tipo.** Esta seção afirmava
+> isso até ser conferida contra a documentação da AWS; é falso para uma
+> instância EBS-backed, que é o caso do AL2023 deste modelo. A tela mostraria
+> `False` e contradiria o apresentador. O mesmo vale para `TagImagem` e
+> `ImagemBackend`: os dois mudam o `UserData`, que também é *"Some
+> interruptions"*.
 
 **Não execute.** Saia da tela ou use **Delete change set**. A pilha fica intacta,
 ainda no ar.
