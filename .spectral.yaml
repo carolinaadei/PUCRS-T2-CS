@@ -1,0 +1,33 @@
+# Regras de lint do contrato OpenAPI, aplicadas no CI pelo job "contrato"
+# (stoplightio/spectral-action) sobre o backend/openapi.json gerado a partir dos
+# decorators do Nest (`npm run openapi:gerar`).
+#
+# A base e o ruleset oficial da OpenAPI. O Spectral falha o job em qualquer
+# violacao de severidade "error"; "warn" aparece no log sem barrar o merge.
+extends:
+  - spectral:oas
+
+rules:
+  # O DocumentBuilder ja preenche contato, licenca e descricao do info; sem isto
+  # como erro, uma alteracao no swagger.ts poderia derrubar os tres em silencio.
+  info-contact: error
+  info-description: error
+  info-license: error
+  license-url: error
+  oas3-api-servers: error
+
+  # Toda rota precisa de tag (as tags sao as secoes da pagina do Swagger) e de
+  # um resumo legivel - e o que o time de front le antes de integrar.
+  operation-tags: error
+  operation-description: warn
+  operation-operationId: error
+  operation-operationId-unique: error
+
+  # Nest gera operationIds no formato "ControllerClass_metodo"; a regra exige
+  # camelCase e reprovaria todas as rotas por uma convencao do framework.
+  operation-operationId-valid-in-url: off
+
+  # Tags declaradas no DocumentBuilder tem descricao; as usadas nas rotas devem
+  # existir na lista global, senao viram secao orfa na documentacao.
+  openapi-tags: warn
+  openapi-tags-alphabetical: off

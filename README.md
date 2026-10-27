@@ -31,3 +31,8 @@
 * A criação de branches deve seguir a política de branches.
 * No desenvolvimento, usar nossa política de commits.
 * As políticas de branches e de commits podem ser encontradas no arquivo sobre [contribuição](CONTRIBUTING.md).
+
+### 3. Pipeline de CI/CD
+A `main` é protegida: o merge só acontece por pull request, e o PR precisa passar por cinco portões automáticos — lint (ESLint), testes com cobertura (Jest), validação do contrato OpenAPI (Spectral), análise estática com Quality Gate (SonarQube) e scan de vulnerabilidades da imagem (Trivy, falhando em HIGH e CRITICAL). Aprovado e mesclado na `main`, ou marcado com uma tag `v*`, a imagem vai para o Docker Hub.
+
+Os portões, como rodar cada um localmente antes de abrir o PR e a configuração manual necessária (secrets, projeto no Sonar, Access Token do Docker Hub e as regras de proteção da branch) estão em [docs/pipeline.md](docs/pipeline.md).

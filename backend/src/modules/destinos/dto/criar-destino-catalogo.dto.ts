@@ -30,7 +30,7 @@ export class CriarDestinoCatalogoDto {
   @IsOptional()
   categoria?: CategoriaDestino;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 'Capital portuguesa, a beira do Tejo' })
   @IsString()
   @IsOptional()
   descricao?: string;

@@ -25,7 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   async validate(payload: PayloadJwt): Promise<UsuarioAutenticado> {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: payload.sub },
-      select: { id: true, nome: true, email: true },
+      select: { id: true, nome: true, email: true, versaoSessao: true },
     });
 
     // Token valido mas usuario removido: o acesso deve ser negado.
@@ -33,6 +33,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Usuario do token nao existe mais');
     }
 
-    return usuario;
+    // A versao muda quando a senha e redefinida: tokens emitidos antes disso
+    // (inclusive um roubado) deixam de valer, mesmo com assinatura e prazo em dia.
+    if (usuario.versaoSessao !== payload.ver) {
+      throw new UnauthorizedException('Sessao encerrada; faca login novamente');
+    }
+
+    return { id: usuario.id, nome: usuario.nome, email: usuario.email };
   }
 }

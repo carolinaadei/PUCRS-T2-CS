@@ -1,13 +1,16 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ExcecaoPrismaFilter } from './common/filters/excecao-prisma.filter';
+import { configurarSwagger } from './config/swagger';
+import { padroesDeDesenvolvimentoEmUso } from './config/validacao-env';
+import { criarPipeValidacao } from './common/pipes/pipe-validacao';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
   const porta = config.get<number>('porta')!;
@@ -15,34 +18,30 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefixo);
   app.use(helmet());
-  app.enableCors({ origin: config.get<string>('corsOrigin'), credentials: true });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true, // remove campos nao declarados nos DTOs
-      forbidNonWhitelisted: true, // e rejeita a requisicao se houver algum
-      transform: true, // converte payloads em instancias dos DTOs
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
+  const origem = config.get<string>('corsOrigin')!;
+  app.enableCors({ origin: origem, credentials: origem !== '*' });
+
+  app.useGlobalPipes(criarPipeValidacao());
 
   app.useGlobalFilters(new ExcecaoPrismaFilter());
 
   // Documentacao interativa da API (apoia a testabilidade citada na Secao 7 da arquitetura)
-  const documento = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle('ViajaJunto API')
-      .setDescription('API REST do ViajaJunto - planejamento colaborativo de viagens')
-      .setVersion('0.1.0')
-      .addBearerAuth()
-      .build(),
-  );
-  SwaggerModule.setup(`${prefixo}/docs`, app, documento);
+  configurarSwagger(app, prefixo);
 
   await app.listen(porta);
 
   const logger = new Logger('Bootstrap');
+
+  const padroes = padroesDeDesenvolvimentoEmUso();
+  if (padroes.length > 0) {
+    logger.warn(
+      `Sem configuracao para: ${padroes.join(', ')}. ` +
+        'Usando padroes de desenvolvimento - o envio de e-mail nao funciona e o ' +
+        'codigo do RF03 sai no log. Em producao estas variaveis sao obrigatorias.',
+    );
+  }
+
   logger.log(`API em http://localhost:${porta}/${prefixo}`);
   logger.log(`Swagger em http://localhost:${porta}/${prefixo}/docs`);
 }

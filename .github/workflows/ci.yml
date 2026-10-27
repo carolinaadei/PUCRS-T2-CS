@@ -1,0 +1,327 @@
+# Pipeline de integracao e entrega continua do ViajaJunto.
+#
+# Cada portao e um job separado de proposito: no PR o time ve qual etapa
+# reprovou sem abrir o log, e a protecao da branch main pode exigir os checks
+# individualmente. Os quatro primeiros jobs rodam em paralelo; "sonarqube"
+# espera a cobertura dos testes e "publicar" espera todos.
+#
+# Segredos e variaveis necessarios estao documentados em docs/pipeline.md.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+    tags: ['v*']
+
+# Sem isto o token nasce com escrita em tudo em repositorios antigos; cada job
+# amplia somente o que precisa.
+permissions:
+  contents: read
+
+# Um push novo na mesma branch cancela a execucao anterior: o que importa e o
+# resultado do ultimo commit, e o runner nao fica preso em builds obsoletos.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERSAO_NODE: "22.x"
+  # Tag local usada entre os jobs de build, scan e publicacao. Nao vai ao registro.
+  IMAGEM_LOCAL: viajajunto-backend:ci
+
+jobs:
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v6.5.0
+        with:
+          node-version: ${{ env.VERSAO_NODE }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      # O ESLint faz type-aware linting (projectService) e os tipos do Prisma sao
+      # gerados. Sem este passo o lint acusa "Cannot find module" nos models.
+      - name: Gerar o cliente Prisma
+        run: npm run prisma:generate
+
+      # --max-warnings=0: o repositorio esta em zero warnings hoje, entao tratar
+      # warning como falha impede a divida voltar a crescer em silencio. O
+      # Prettier entra pelo eslint-plugin-prettier, logo formatacao falha aqui tambem.
+      - name: Verificar o lint
+        run: npm run lint:ci
+
+  # ---------------------------------------------------------------------------
+  testes:
+    name: Testes + cobertura
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v6.5.0
+        with:
+          node-version: ${{ env.VERSAO_NODE }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Gerar o cliente Prisma
+        run: npm run prisma:generate
+
+      - name: Testes unitarios
+        run: npm run test:cov
+
+      # Os e2e usam um PrismaService mockado, entao nao precisam de banco no CI.
+      # A suite "integracao" se auto-pula sem um DATABASE_URL real.
+      - name: Testes e2e
+        run: npm run test:cov:e2e
+
+      # Os dois lcov seguem para o Sonar: sozinha, a cobertura unitaria ignoraria
+      # tudo que so e exercitado via HTTP (controllers, guards, pipes, filtros).
+      - name: Guardar os relatorios de cobertura
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: cobertura
+          path: |
+            backend/coverage/lcov.info
+            backend/coverage-e2e/lcov.info
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  contrato:
+    name: Contrato OpenAPI (Spectral)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # O spectral-action publica as violacoes como um check run anotado no PR.
+      checks: write
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v6.5.0
+        with:
+          node-version: ${{ env.VERSAO_NODE }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Gerar o cliente Prisma
+        run: npm run prisma:generate
+
+      # O contrato nao e versionado: deriva dos decorators dos controllers. Gerar
+      # aqui garante que o Spectral valide o codigo deste commit, e nao um JSON
+      # commitado que envelheceu.
+      - name: Gerar o contrato OpenAPI
+        run: npm run openapi:gerar
+
+      # O caminho e relativo a raiz do repositorio: a action roda em container,
+      # fora do working-directory dos passos acima.
+      - name: Validar o contrato
+        uses: stoplightio/spectral-action@6416fd018ae38e60136775066eb3e98172143141 # v0.8.13
+        with:
+          file_glob: backend/openapi.json
+          spectral_ruleset: .spectral.yaml
+
+  # ---------------------------------------------------------------------------
+  sonarqube:
+    name: SonarQube (Quality Gate)
+    runs-on: ubuntu-latest
+    needs: testes
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # O Sonar usa o historico para atribuir issues a autor e data ("new
+          # code"); com o clone raso de 1 commit tudo apareceria como novo.
+          fetch-depth: 0
+
+      - name: Baixar os relatorios de cobertura
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: cobertura
+          path: backend
+
+      # Mensagem clara em vez do erro cru do scanner quando o repositorio ainda
+      # nao tem os segredos configurados.
+      - name: Conferir os segredos do Sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_HOST_URL" ]; then
+            echo "::error::Configure os secrets SONAR_TOKEN e SONAR_HOST_URL no repositorio (veja docs/pipeline.md)."
+            exit 1
+          fi
+
+      - name: Analisar e aguardar o Quality Gate
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          # Sem isto o scanner usa a raiz do repositorio, nao encontra o
+          # backend/sonar-project.properties ("Project root configuration file:
+          # NONE") e aborta cobrando sonar.projectKey e sonar.organization. E
+          # tambem daqui que saem os caminhos relativos do lcov e de sonar.sources.
+          projectBaseDir: backend
+          # qualitygate.wait faz o scanner bloquear ate o servidor calcular o
+          # gate e sair com codigo != 0 se reprovar - e isso que derruba o PR.
+          # Sem ele o job passaria mesmo com o gate vermelho.
+          args: >
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=600
+
+  # ---------------------------------------------------------------------------
+  imagem:
+    name: Imagem Docker + Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Construir a imagem
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          file: backend/Dockerfile
+          load: true
+          tags: ${{ env.IMAGEM_LOCAL }}
+          # Cache do buildx no proprio Actions: sem ele o `prisma generate` baixa
+          # os engines em toda execucao.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Attestations nao podem ser carregadas no daemon local (load: true).
+          provenance: false
+
+      - name: Escanear vulnerabilidades
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEM_LOCAL }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          # ignore-unfixed: sem correcao publicada nao ha o que mudar no nosso
+          # Dockerfile; barrar o merge nesses casos so ensinaria o time a ignorar
+          # o scan. Excecoes conscientes vao no .trivyignore, com justificativa.
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"
+          format: table
+          output: trivy.txt
+
+      # if: always() para o relatorio existir justamente quando o scan falha.
+      - name: Guardar o relatorio do Trivy
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: relatorio-trivy
+          path: trivy.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+      # A imagem publicada tem que ser exatamente a que o Trivy aprovou. Passar o
+      # tar entre os jobs evita reconstruir e publicar camadas que ninguem escaneou.
+      - name: Exportar a imagem aprovada
+        if: github.event_name == 'push'
+        run: docker save -o imagem.tar ${{ env.IMAGEM_LOCAL }}
+
+      - name: Guardar a imagem aprovada
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: imagem-docker
+          path: imagem.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  publicar:
+    name: Publicar no Docker Hub
+    runs-on: ubuntu-latest
+    # Publica so depois de todos os portoes: nenhuma imagem chega ao registro sem
+    # lint, testes, contrato, Quality Gate e scan aprovados.
+    needs: [lint, testes, contrato, sonarqube, imagem]
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Baixar a imagem aprovada
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: imagem-docker
+
+      - name: Carregar a imagem no daemon
+        run: docker load --input imagem.tar
+
+      - name: Calcular as tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          # vars.DOCKERHUB_IMAGEM permite publicar sob uma organizacao cujo nome
+          # difere do usuario que autentica; sem ela, cai no usuario.
+          images: ${{ vars.DOCKERHUB_IMAGEM || format('{0}/viajajunto-backend', secrets.DOCKERHUB_USERNAME) }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=long
+
+      - name: Autenticar no Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # Access Token do Docker Hub, nunca a senha da conta: o token e
+          # revogavel e tem escopo limitado a push/pull.
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # As tags vem numa string multilinha; o loop as aplica sobre a mesma imagem
+      # local, entao todas apontam para o mesmo digest.
+      - name: Marcar e publicar
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          ORIGEM: ${{ env.IMAGEM_LOCAL }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$TAGS" | while read -r tag; do
+            [ -n "$tag" ] || continue
+            echo "--> $tag"
+            docker tag "$ORIGEM" "$tag"
+            docker push "$tag"
+          done
+
+      - name: Resumir a publicacao
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo '### Imagem publicada no Docker Hub'
+            echo
+            printf '%s\n' "$TAGS" | while read -r tag; do
+              [ -n "$tag" ] && echo "- \`$tag\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

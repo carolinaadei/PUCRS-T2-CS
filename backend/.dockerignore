@@ -1,0 +1,28 @@
+# Quanto menos entra no contexto, mais rapido o build e menor a chance de um
+# segredo local (.env) acabar dentro de uma camada da imagem.
+node_modules
+dist
+coverage
+coverage-e2e
+openapi.json
+
+.env
+.env.*
+env*.txt
+*.env
+
+.git
+.github
+.gitignore
+.gitattributes
+.prettierrc
+eslint.config.mjs
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+test
+docs
+README.md
+*.md
+*.log

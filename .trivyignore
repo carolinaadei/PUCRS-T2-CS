@@ -1,0 +1,16 @@
+# Excecoes conscientes do scan de vulnerabilidades (job "imagem" do CI).
+#
+# O Trivy roda com --ignore-unfixed, entao vulnerabilidade sem correcao publicada
+# ja nao barra o merge: nao ha nada a mudar no Dockerfile enquanto o upstream nao
+# libera o patch. Este arquivo e para o outro caso - a correcao existe, mas nao da
+# para aplicar agora (dependencia transitiva travada, breaking change, etc).
+#
+# Regras para adicionar uma linha aqui:
+#   1. Uma linha por CVE, com comentario dizendo por que nao aplicamos a correcao
+#      e qual a data de revisao.
+#   2. Nenhuma entrada permanente. Se nao for revisada, remova e deixe o CI falhar.
+#
+# Formato:
+#   CVE-2024-00000  # motivo - revisar em AAAA-MM-DD
+#
+# Nenhuma excecao ativa no momento.
