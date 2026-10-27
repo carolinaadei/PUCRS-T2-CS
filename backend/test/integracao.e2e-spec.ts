@@ -157,8 +157,14 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.nome).toBe('Ana Renomeada');
     });
 
-    it('GET /api/usuarios/eu/paises-visitados ainda responde 501 (RF11)', () =>
-      http().get('/api/usuarios/eu/paises-visitados').set(comToken(tokenCriador)).expect(501));
+    it('GET /api/usuarios/eu/paises-visitados inicia vazio sem viagens concluidas (RF11)', async () => {
+      const { body } = await http()
+        .get('/api/usuarios/eu/paises-visitados')
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(body).toEqual([]);
+    });
   });
 
   describe('Viagens (RF04 a RF07)', () => {
@@ -278,6 +284,21 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body.descricao).toBe('Primeira parada');
+    });
+
+    it('GET /api/usuarios/eu/paises-visitados lista paises de viagens CONCLUIDAS (RF11)', async () => {
+      await http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ status: 'CONCLUIDA' })
+        .expect(200);
+
+      const { body } = await http()
+        .get('/api/usuarios/eu/paises-visitados')
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(body).toEqual([{ codigo: 'PT', nome: 'Portugal', viagens: 1 }]);
     });
   });
 

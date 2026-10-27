@@ -4,6 +4,10 @@
 # isola-las, defina COMPOSE_PROJECT_NAME no .env (veja .env.example).
 name: ${COMPOSE_PROJECT_NAME:-viajajunto}
 
+# Inclui a infraestrutura da AWS local (MiniStack + CloudFormation)
+include:
+  - path: ../infra/ministack/compose.yml
+
 services:
   postgres:
     image: postgres:16-alpine

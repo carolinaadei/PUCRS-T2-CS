@@ -1,11 +1,7 @@
-import { Body, Controller, Get, NotImplementedException, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
-import {
-  ApiAutenticado,
-  ApiErroValidacao,
-  ApiNaoImplementado,
-} from '../../common/swagger/api-respostas.decorator';
+import { ApiAutenticado, ApiErroValidacao } from '../../common/swagger/api-respostas.decorator';
 import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
 import { AtualizarPerfilDto } from './dto/atualizar-perfil.dto';
 import { PaisVisitadoDto, PerfilDto } from './dto/perfil.dto';
@@ -40,15 +36,12 @@ export class UsuariosController {
 
   @Get('eu/paises-visitados')
   @ApiOperation({
-    summary: 'RF11 - Paises visitados (nao implementado)',
+    summary: 'RF11 - Paises visitados',
     description:
       'Paises dos destinos das viagens concluidas do usuario, para o mapa (jsVectormap).',
   })
   @ApiOkResponse({ type: [PaisVisitadoDto] })
-  @ApiNaoImplementado()
-  paisesVisitados(): never {
-    // TODO (RF11 - prioridade Media): paises de `destino_catalogo` nas viagens
-    // CONCLUIDAS em que o usuario e criador ou membro, convertidos para ISO alfa-2.
-    throw new NotImplementedException('RF11 ainda nao implementado');
+  paisesVisitados(@UsuarioAtual() usuario: UsuarioAutenticado) {
+    return this.usuariosService.listarPaisesVisitados(usuario.id);
   }
 }

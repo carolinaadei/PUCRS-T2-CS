@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RespostaPaginada } from '../../common/dto/paginacao.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -45,7 +45,13 @@ export class DestinosService {
   }
 
   criarNoCatalogo(dto: CriarDestinoCatalogoDto) {
-    return this.prisma.destinoCatalogo.create({ data: dto });
+    return this.prisma.destinoCatalogo.create({
+      data: {
+        ...dto,
+        nome: dto.nome.trim(),
+        pais: dto.pais?.trim(),
+      },
+    });
   }
 
   // -------------------- Destinos de uma viagem -------------------
@@ -64,14 +70,18 @@ export class DestinosService {
 
   /** RF08 - adiciona um destino a viagem. Sem `ordem`, entra no fim do roteiro. */
   async adicionarNaViagem(viagemId: string, dto: AdicionarDestinoViagemDto) {
+    const chegada = dto.chegada ? new Date(dto.chegada) : null;
+    const saida = dto.saida ? new Date(dto.saida) : null;
+    this.validarDatas(chegada, saida);
+
     const ordem = dto.ordem ?? (await this.proximaOrdem(viagemId));
 
     return this.prisma.destinoViagem.create({
       data: {
         viagemId,
         destinoCatalogoId: dto.destinoCatalogoId,
-        chegada: dto.chegada ? new Date(dto.chegada) : null,
-        saida: dto.saida ? new Date(dto.saida) : null,
+        chegada,
+        saida,
         descricao: dto.descricao,
         ordem,
       },
@@ -80,7 +90,11 @@ export class DestinosService {
   }
 
   async atualizarNaViagem(viagemId: string, destinoId: number, dto: AtualizarDestinoViagemDto) {
-    await this.garantirDestinoDaViagem(viagemId, destinoId);
+    const destinoAtual = await this.garantirDestinoDaViagem(viagemId, destinoId);
+
+    const chegada = dto.chegada ? new Date(dto.chegada) : destinoAtual.chegada;
+    const saida = dto.saida ? new Date(dto.saida) : destinoAtual.saida;
+    this.validarDatas(chegada, saida);
 
     return this.prisma.destinoViagem.update({
       where: { id: destinoId },
@@ -99,6 +113,12 @@ export class DestinosService {
     await this.prisma.destinoViagem.delete({ where: { id: destinoId } });
   }
 
+  private validarDatas(chegada?: Date | null, saida?: Date | null) {
+    if (chegada && saida && saida.getTime() < chegada.getTime()) {
+      throw new BadRequestException('A data de saida nao pode ser anterior a data de chegada');
+    }
+  }
+
   private async proximaOrdem(viagemId: string): Promise<number> {
     const ultimo = await this.prisma.destinoViagem.findFirst({
       where: { viagemId },
@@ -113,11 +133,13 @@ export class DestinosService {
   private async garantirDestinoDaViagem(viagemId: string, destinoId: number) {
     const destino = await this.prisma.destinoViagem.findUnique({
       where: { id: destinoId },
-      select: { viagemId: true },
+      select: { viagemId: true, chegada: true, saida: true },
     });
 
     if (!destino || destino.viagemId !== viagemId) {
       throw new NotFoundException('Destino nao encontrado nesta viagem');
     }
+
+    return destino;
   }
 }
