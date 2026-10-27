@@ -104,16 +104,33 @@ export class ViagensService {
     return viagem;
   }
 
-  /** RF05, RF07 - editar dados e status da viagem (exige EDITOR, RN02). */
-  atualizar(viagemId: string, dto: AtualizarViagemDto) {
+  /**
+   * RF05, RF07 - editar dados e status da viagem (exige EDITOR, RN02). Campo
+   * omitido fica como esta; `null` apaga a descricao ou uma das datas.
+   */
+  async atualizar(viagemId: string, dto: AtualizarViagemDto) {
+    // O periodo e conferido junto com o que ja esta gravado: mudar so uma das
+    // datas tambem nao pode deixar o fim antes do inicio.
+    const atual = await this.prisma.viagem.findUniqueOrThrow({
+      where: { id: viagemId },
+      select: { dataInicio: true, dataFim: true },
+    });
+
+    const dataInicio =
+      dto.dataInicio === undefined ? atual.dataInicio : this.paraData(dto.dataInicio, 'inicio');
+    const dataFim = dto.dataFim === undefined ? atual.dataFim : this.paraData(dto.dataFim, 'fim');
+
+    this.validarPeriodo(dataInicio, dataFim);
+
     return this.prisma.viagem.update({
       where: { id: viagemId },
       data: {
-        nome: dto.nome?.trim(),
+        // Nome e status sao obrigatorios: null vale como campo omitido.
+        nome: dto.nome ?? undefined,
         descricao: dto.descricao,
-        dataInicio: dto.dataInicio ? new Date(dto.dataInicio) : undefined,
-        dataFim: dto.dataFim ? new Date(dto.dataFim) : undefined,
-        status: dto.status,
+        dataInicio,
+        dataFim,
+        status: dto.status ?? undefined,
       },
     });
   }
@@ -127,7 +144,7 @@ export class ViagensService {
    * Converte a data recebida (aaaa-mm-dd) para UTC, de modo que o dia gravado
    * na coluna DATE seja sempre o informado, independentemente do fuso do servidor.
    */
-  private paraData(valor: string | undefined, campo: 'inicio' | 'fim'): Date | null {
+  private paraData(valor: string | null | undefined, campo: 'inicio' | 'fim'): Date | null {
     if (!valor) {
       return null;
     }
@@ -142,7 +159,7 @@ export class ViagensService {
     return data;
   }
 
-  /** RF04 - as datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
+  /** RF04, RF05 - as datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
   private validarPeriodo(dataInicio: Date | null, dataFim: Date | null) {
     if (dataFim && !dataInicio) {
       throw new BadRequestException('Informe a data de inicio da viagem junto com a data de fim');

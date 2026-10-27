@@ -28,15 +28,25 @@ export class CriarViagemDto {
   @IsOptional()
   descricao?: string | null;
 
-  @ApiPropertyOptional({ example: '2027-01-10', description: 'Data no formato aaaa-mm-dd' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '2027-01-10',
+    description: 'Data no formato aaaa-mm-dd',
+  })
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Informe a data de inicio no formato aaaa-mm-dd' })
   @IsOptional()
-  dataInicio?: string;
+  dataInicio?: string | null;
 
-  @ApiPropertyOptional({ example: '2027-01-25', description: 'Data no formato aaaa-mm-dd' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '2027-01-25',
+    description: 'Data no formato aaaa-mm-dd',
+  })
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Informe a data de fim no formato aaaa-mm-dd' })
   @IsOptional()
-  dataFim?: string;
+  dataFim?: string | null;
 
   @ApiPropertyOptional({ enum: StatusViagem, default: StatusViagem.EM_PLANEJAMENTO })
   @IsEnum(StatusViagem, { message: 'Status invalido para a viagem' })

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { Prisma, StatusViagem } from '@prisma/client';
 import { PaginacaoDto } from '../../common/dto/paginacao.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
 import { ViagensService } from './viagens.service';
 
 /**
@@ -12,13 +13,25 @@ import { ViagensService } from './viagens.service';
 describe('ViagensService', () => {
   let service: ViagensService;
   let prisma: {
-    viagem: { create: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+    viagem: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+      update: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
 
   beforeEach(async () => {
     prisma = {
-      viagem: { create: jest.fn(), findMany: jest.fn(), count: jest.fn() },
+      viagem: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+        update: jest.fn(),
+      },
       $transaction: jest.fn((promessas: unknown[]) => Promise.all(promessas)),
     };
 
@@ -99,6 +112,67 @@ describe('ViagensService', () => {
 
       expect(prisma.viagem.create).toHaveBeenCalledTimes(2);
       expect(viagem.id).toHaveLength(8);
+    });
+  });
+
+  describe('atualizar (RF05, RF07)', () => {
+    const INICIO_GRAVADO = new Date('2027-01-10T00:00:00.000Z');
+    const FIM_GRAVADO = new Date('2027-01-25T00:00:00.000Z');
+
+    beforeEach(() => {
+      prisma.viagem.findUniqueOrThrow.mockResolvedValue({
+        dataInicio: INICIO_GRAVADO,
+        dataFim: FIM_GRAVADO,
+      });
+      prisma.viagem.update.mockImplementation(({ data }) => Promise.resolve(data));
+    });
+
+    it('muda so o status e mantem as datas gravadas', async () => {
+      const viagem = await service.atualizar('A3KD9F2P', { status: StatusViagem.CONFIRMADA });
+
+      expect(viagem).toMatchObject({
+        status: StatusViagem.CONFIRMADA,
+        dataInicio: INICIO_GRAVADO,
+        dataFim: FIM_GRAVADO,
+      });
+      expect(viagem.nome).toBeUndefined();
+    });
+
+    it('rejeita data de fim anterior ao inicio ja gravado', async () => {
+      await expect(service.atualizar('A3KD9F2P', { dataFim: '2027-01-05' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+
+      expect(prisma.viagem.update).not.toHaveBeenCalled();
+    });
+
+    it('rejeita dia inexistente no calendario', async () => {
+      await expect(service.atualizar('A3KD9F2P', { dataFim: '2027-02-30' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('apaga as datas recebidas como null', async () => {
+      const viagem = await service.atualizar('A3KD9F2P', { dataInicio: null, dataFim: null });
+
+      expect(viagem.dataInicio).toBeNull();
+      expect(viagem.dataFim).toBeNull();
+    });
+
+    it('nao apaga o inicio enquanto houver data de fim', async () => {
+      await expect(service.atualizar('A3KD9F2P', { dataInicio: null })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('ignora null em nome e status, que sao obrigatorios', async () => {
+      const viagem = await service.atualizar('A3KD9F2P', {
+        nome: null,
+        status: null,
+      } as unknown as AtualizarViagemDto);
+
+      expect(viagem.nome).toBeUndefined();
+      expect(viagem.status).toBeUndefined();
     });
   });
 

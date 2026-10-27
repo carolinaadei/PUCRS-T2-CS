@@ -47,7 +47,11 @@ export class ViagensController {
     description: 'O `id` gerado (8 caracteres) e tambem o codigo de convite (RF18).',
   })
   @ApiCreatedResponse({ type: ViagemDto })
-  @ApiErroValidacao('nome should not be empty', 'dataInicio must be a valid ISO 8601 date string')
+  @ApiErroValidacao(
+    'O nome da viagem nao pode ficar em branco',
+    'Informe a data de inicio no formato aaaa-mm-dd',
+    'A data de fim nao pode ser anterior a data de inicio',
+  )
   criar(@UsuarioAtual() usuario: UsuarioAutenticado, @Body() dto: CriarViagemDto) {
     return this.viagensService.criar(usuario.id, dto);
   }
@@ -81,11 +85,14 @@ export class ViagensController {
   @ApiParamViagem()
   @ApiOperation({
     summary: 'RF05, RF07 - Editar viagem e status',
-    description: 'Envie so os campos que mudam. Exige EDITOR.',
+    description:
+      'Envie so os campos que mudam; `null` apaga a descricao ou uma das datas. ' +
+      'O periodo e conferido junto com as datas ja gravadas. Exige EDITOR.',
   })
   @ApiOkResponse({ type: ViagemDto })
   @ApiErroValidacao(
-    'status must be one of the following values: EM_PLANEJAMENTO, CONFIRMADA, CONCLUIDA',
+    'Status invalido para a viagem',
+    'A data de fim nao pode ser anterior a data de inicio',
   )
   @ApiAcessoViagem(NivelAcessoViagem.EDITOR)
   atualizar(@Param('viagemId') viagemId: string, @Body() dto: AtualizarViagemDto) {

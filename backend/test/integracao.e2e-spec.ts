@@ -212,6 +212,27 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.nome).toBe('Eurotrip 2027 - revisada');
       expect(body.status).toBe('CONFIRMADA');
     });
+
+    it('POST /api/viagens recusa nome so com espacos (400)', () =>
+      http().post('/api/viagens').set(comToken(tokenCriador)).send({ nome: '   ' }).expect(400));
+
+    it('PATCH /api/viagens/:id confere o novo fim com o inicio ja gravado (400)', () =>
+      http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ dataFim: '2027-01-05' })
+        .expect(400));
+
+    it('PATCH /api/viagens/:id com null apaga descricao e datas', async () => {
+      const { body } = await http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ descricao: null, dataInicio: null, dataFim: null })
+        .expect(200);
+
+      expect(body).toMatchObject({ descricao: null, dataInicio: null, dataFim: null });
+      expect(body.nome).toBe('Eurotrip 2027 - revisada');
+    });
   });
 
   describe('Destinos (RF08 a RF10)', () => {
