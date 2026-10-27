@@ -33,8 +33,8 @@ export class ViagensService {
         return await this.prisma.viagem.create({
           data: {
             id: this.gerarCodigoConvite(),
-            nome: dto.nome.trim(),
-            descricao: dto.descricao?.trim() || null,
+            nome: dto.nome,
+            descricao: dto.descricao,
             dataInicio,
             dataFim,
             status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,

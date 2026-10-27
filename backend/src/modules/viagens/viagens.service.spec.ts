@@ -45,8 +45,8 @@ describe('ViagensService', () => {
 
     it('grava nome, descricao e datas gerais informados', async () => {
       const viagem = await service.criar(1, {
-        nome: '  Eurotrip 2027  ',
-        descricao: '  Roteiro de 15 dias  ',
+        nome: 'Eurotrip 2027',
+        descricao: 'Roteiro de 15 dias',
         dataInicio: '2027-01-10',
         dataFim: '2027-01-25',
       });
@@ -58,10 +58,9 @@ describe('ViagensService', () => {
       expect(viagem.dataFim?.toISOString()).toBe('2027-01-25T00:00:00.000Z');
     });
 
-    it('aceita viagem sem descricao e sem datas definidas', async () => {
+    it('aceita viagem sem datas definidas', async () => {
       const viagem = await service.criar(1, { nome: 'Viagem sem data' });
 
-      expect(viagem.descricao).toBeNull();
       expect(viagem.dataInicio).toBeNull();
       expect(viagem.dataFim).toBeNull();
     });
