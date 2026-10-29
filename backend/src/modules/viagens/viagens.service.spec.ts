@@ -6,6 +6,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
 import { ViagensService } from './viagens.service';
 
+/** A mensagem e o que o usuario le: confere o tipo do erro e o texto. */
+const esperarRecusa = async (promessa: Promise<unknown>, mensagem: string) => {
+  await expect(promessa).rejects.toBeInstanceOf(BadRequestException);
+  await expect(promessa).rejects.toThrow(mensagem);
+};
+
 /**
  * Exemplo de teste unitario com o Prisma mockado - use como modelo
  * para os demais services (Secao 7 do Documento de Arquitetura: Testabilidade).
@@ -79,23 +85,26 @@ describe('ViagensService', () => {
     });
 
     it('rejeita data de fim anterior a data de inicio', async () => {
-      await expect(
+      await esperarRecusa(
         service.criar(1, { nome: 'Eurotrip', dataInicio: '2027-01-25', dataFim: '2027-01-10' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+        'A data de fim nao pode ser anterior a data de inicio',
+      );
 
       expect(prisma.viagem.create).not.toHaveBeenCalled();
     });
 
     it('rejeita data de fim sem data de inicio', async () => {
-      await expect(
+      await esperarRecusa(
         service.criar(1, { nome: 'Eurotrip', dataFim: '2027-01-10' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+        'Uma viagem com data de fim precisa ter data de inicio',
+      );
     });
 
     it('rejeita dia inexistente no calendario', async () => {
-      await expect(
+      await esperarRecusa(
         service.criar(1, { nome: 'Eurotrip', dataInicio: '2027-02-31' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+        'A data de inicio 2027-02-31 nao existe no calendario',
+      );
     });
 
     it('gera outro codigo quando o sorteado ja existe', async () => {
@@ -139,16 +148,18 @@ describe('ViagensService', () => {
     });
 
     it('rejeita data de fim anterior ao inicio ja gravado', async () => {
-      await expect(service.atualizar('A3KD9F2P', { dataFim: '2027-01-05' })).rejects.toBeInstanceOf(
-        BadRequestException,
+      await esperarRecusa(
+        service.atualizar('A3KD9F2P', { dataFim: '2027-01-05' }),
+        'A data de fim nao pode ser anterior a data de inicio',
       );
 
       expect(prisma.viagem.update).not.toHaveBeenCalled();
     });
 
     it('rejeita dia inexistente no calendario', async () => {
-      await expect(service.atualizar('A3KD9F2P', { dataFim: '2027-02-30' })).rejects.toBeInstanceOf(
-        BadRequestException,
+      await esperarRecusa(
+        service.atualizar('A3KD9F2P', { dataFim: '2027-02-30' }),
+        'A data de fim 2027-02-30 nao existe no calendario',
       );
     });
 
@@ -160,8 +171,9 @@ describe('ViagensService', () => {
     });
 
     it('nao apaga o inicio enquanto houver data de fim', async () => {
-      await expect(service.atualizar('A3KD9F2P', { dataInicio: null })).rejects.toBeInstanceOf(
-        BadRequestException,
+      await esperarRecusa(
+        service.atualizar('A3KD9F2P', { dataInicio: null }),
+        'Uma viagem com data de fim precisa ter data de inicio',
       );
     });
 

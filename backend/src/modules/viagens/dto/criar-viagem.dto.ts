@@ -3,6 +3,9 @@ import { StatusViagem } from '@prisma/client';
 import { Transform, TransformFnParams } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
+/** So o formato; se o dia existe no calendario, o service confere. */
+const FORMATO_DATA = /^\d{4}-\d{2}-\d{2}$/;
+
 /** RF04 - criar viagem com nome, descricao e datas gerais. */
 export class CriarViagemDto {
   @ApiProperty({ example: 'Eurotrip 2027' })
@@ -34,7 +37,9 @@ export class CriarViagemDto {
     example: '2027-01-10',
     description: 'Data no formato aaaa-mm-dd',
   })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Informe a data de inicio no formato aaaa-mm-dd' })
+  @Matches(FORMATO_DATA, {
+    message: 'Informe a data de inicio no formato aaaa-mm-dd (ex.: 2027-01-10)',
+  })
   @IsOptional()
   dataInicio?: string | null;
 
@@ -44,12 +49,16 @@ export class CriarViagemDto {
     example: '2027-01-25',
     description: 'Data no formato aaaa-mm-dd',
   })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Informe a data de fim no formato aaaa-mm-dd' })
+  @Matches(FORMATO_DATA, {
+    message: 'Informe a data de fim no formato aaaa-mm-dd (ex.: 2027-01-25)',
+  })
   @IsOptional()
   dataFim?: string | null;
 
   @ApiPropertyOptional({ enum: StatusViagem, default: StatusViagem.EM_PLANEJAMENTO })
-  @IsEnum(StatusViagem, { message: 'Status invalido para a viagem' })
+  @IsEnum(StatusViagem, {
+    message: `Status invalido: use ${Object.values(StatusViagem).join(', ')}`,
+  })
   @IsOptional()
   status?: StatusViagem;
 }

@@ -26,6 +26,17 @@ describe('DTOs de viagem', () => {
     });
   });
 
+  it('explica o formato de data e os status aceitos', async () => {
+    await expect(
+      mensagensDoErro({ nome: 'Eurotrip', dataInicio: '10/01/2027', status: 'ATIVA' }),
+    ).resolves.toMatchObject({
+      message: [
+        'Informe a data de inicio no formato aaaa-mm-dd (ex.: 2027-01-10)',
+        'Status invalido: use EM_PLANEJAMENTO, CONFIRMADA, CONCLUIDA',
+      ],
+    });
+  });
+
   it('trata descricao em branco como ausente', async () => {
     const dto = await validar(CriarViagemDto, { nome: 'Eurotrip', descricao: '   ' });
 

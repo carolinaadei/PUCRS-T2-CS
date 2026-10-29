@@ -51,7 +51,9 @@ export class ViagensService {
       }
     }
 
-    throw new InternalServerErrorException('Nao foi possivel gerar um codigo de convite unico');
+    throw new InternalServerErrorException(
+      'Nao foi possivel criar a viagem agora. Tente novamente',
+    );
   }
 
   /**
@@ -153,7 +155,7 @@ export class ViagensService {
 
     // Descarta dias inexistentes (ex.: 2027-02-31), que o Date normalizaria em silencio.
     if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== valor) {
-      throw new BadRequestException(`A data de ${campo} informada nao existe no calendario`);
+      throw new BadRequestException(`A data de ${campo} ${valor} nao existe no calendario`);
     }
 
     return data;
@@ -162,7 +164,7 @@ export class ViagensService {
   /** RF04, RF05 - as datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
   private validarPeriodo(dataInicio: Date | null, dataFim: Date | null) {
     if (dataFim && !dataInicio) {
-      throw new BadRequestException('Informe a data de inicio da viagem junto com a data de fim');
+      throw new BadRequestException('Uma viagem com data de fim precisa ter data de inicio');
     }
 
     if (dataInicio && dataFim && dataFim < dataInicio) {

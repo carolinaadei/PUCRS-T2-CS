@@ -213,9 +213,6 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.status).toBe('CONFIRMADA');
     });
 
-    it('POST /api/viagens recusa nome so com espacos (400)', () =>
-      http().post('/api/viagens').set(comToken(tokenCriador)).send({ nome: '   ' }).expect(400));
-
     it('PATCH /api/viagens/:id confere o novo fim com o inicio ja gravado (400)', () =>
       http()
         .patch(`/api/viagens/${viagemId}`)

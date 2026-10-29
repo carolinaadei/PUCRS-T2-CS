@@ -43,13 +43,15 @@ export class ViagensController {
 
   @Post()
   @ApiOperation({
-    summary: 'RF04 - Criar viagem',
-    description: 'O `id` gerado (8 caracteres) e tambem o codigo de convite (RF18).',
+    summary: 'Criar viagem',
+    description:
+      'Cria a viagem com nome e, se quiser, descricao e datas de inicio e fim. ' +
+      'O `id` devolvido (8 caracteres) e tambem o codigo para convidar outras pessoas.',
   })
   @ApiCreatedResponse({ type: ViagemDto })
   @ApiErroValidacao(
     'O nome da viagem nao pode ficar em branco',
-    'Informe a data de inicio no formato aaaa-mm-dd',
+    'Informe a data de inicio no formato aaaa-mm-dd (ex.: 2027-01-10)',
     'A data de fim nao pode ser anterior a data de inicio',
   )
   criar(@UsuarioAtual() usuario: UsuarioAutenticado, @Body() dto: CriarViagemDto) {
@@ -58,8 +60,10 @@ export class ViagensController {
 
   @Get()
   @ApiOperation({
-    summary: 'RF06 - Painel pessoal: viagens criadas e compartilhadas',
-    description: 'Paginado, ordenado pela data de inicio.',
+    summary: 'Listar minhas viagens',
+    description:
+      'Viagens que voce criou e aquelas para as quais foi convidado, ' +
+      'ordenadas pela data de inicio. Resultado paginado.',
   })
   @ApiOkResponse({ type: PaginaViagensDto })
   @ApiErroValidacao('limite must not be greater than 100')
@@ -71,8 +75,10 @@ export class ViagensController {
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiParamViagem()
   @ApiOperation({
-    summary: 'RN06 - Detalhe da viagem',
-    description: 'Inclui criador, colaboradores, destinos e orcamento. Somente membros.',
+    summary: 'Ver detalhes da viagem',
+    description:
+      'Inclui criador, colaboradores, destinos e orcamento. ' +
+      'Disponivel apenas para quem participa da viagem.',
   })
   @ApiOkResponse({ type: ViagemDetalheDto })
   @ApiAcessoViagem(NivelAcessoViagem.MEMBRO)
@@ -84,14 +90,16 @@ export class ViagensController {
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @ApiParamViagem()
   @ApiOperation({
-    summary: 'RF05, RF07 - Editar viagem e status',
+    summary: 'Editar viagem',
     description:
-      'Envie so os campos que mudam; `null` apaga a descricao ou uma das datas. ' +
-      'O periodo e conferido junto com as datas ja gravadas. Exige EDITOR.',
+      'Altera nome, descricao, datas ou status. Envie apenas os campos que mudam; ' +
+      '`null` apaga a descricao ou uma das datas. A data de fim nao pode ficar antes ' +
+      'da de inicio, mesmo que so uma delas seja enviada. ' +
+      'Permitido ao criador e aos colaboradores com permissao de edicao.',
   })
   @ApiOkResponse({ type: ViagemDto })
   @ApiErroValidacao(
-    'Status invalido para a viagem',
+    'Status invalido: use EM_PLANEJAMENTO, CONFIRMADA, CONCLUIDA',
     'A data de fim nao pode ser anterior a data de inicio',
   )
   @ApiAcessoViagem(NivelAcessoViagem.EDITOR)
@@ -104,8 +112,10 @@ export class ViagensController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParamViagem()
   @ApiOperation({
-    summary: 'RF05 - Excluir viagem',
-    description: 'Apaga tambem destinos, atividades, colaboradores e orcamento. So o criador.',
+    summary: 'Excluir viagem',
+    description:
+      'Apaga tambem destinos, atividades, colaboradores e orcamento. ' +
+      'Apenas o criador pode excluir.',
   })
   @ApiNoContentResponse({ description: 'Viagem excluida' })
   @ApiAcessoViagem(NivelAcessoViagem.CRIADOR)
