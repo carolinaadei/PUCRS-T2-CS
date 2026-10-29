@@ -55,7 +55,7 @@ const MOTIVO_403: Partial<Record<NivelAcessoViagem, string>> = {
  * `outroNaoEncontrado` descreve outro 404 possivel na mesma rota.
  */
 export const ApiAcessoViagem = (nivel: NivelAcessoViagem, outroNaoEncontrado?: string) => {
-  const naoEncontrada = 'Viagem nao encontrada ou voce nao participa dela (RN06)';
+  const naoEncontrada = 'Viagem nao encontrada ou voce nao participa dela';
   const decoradores = [
     ApiErro(
       404,

@@ -27,7 +27,7 @@ describe('AcessoViagemGuard (e2e)', () => {
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     usuario: { findUnique: jest.fn() },
-    viagem: { findUnique: jest.fn(), update: jest.fn() },
+    viagem: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), update: jest.fn() },
   };
 
   /** A viagem DEMO2027 pertence ao usuario 1; o usuario 2 e VISUALIZADOR. */
@@ -89,6 +89,7 @@ describe('AcessoViagemGuard (e2e)', () => {
   it('RN02 - o criador pode editar a viagem', async () => {
     const token = tokenDe(CRIADOR);
     comViagemPadrao(CRIADOR.id);
+    prismaMock.viagem.findUniqueOrThrow.mockResolvedValue({ dataInicio: null, dataFim: null });
     prismaMock.viagem.update.mockResolvedValue({ id: 'DEMO2027', nome: 'Novo nome' });
 
     await request(app.getHttpServer())

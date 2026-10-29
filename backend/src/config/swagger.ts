@@ -36,7 +36,7 @@ export const criarDocumentoSwagger = (app: INestApplication): OpenAPIObject =>
       // A ordem das tags e a ordem das secoes na pagina.
       .addTag('Autenticacao', 'Cadastro, login e recuperacao de senha (RF01 a RF03)')
       .addTag('Usuarios', 'Perfil do usuario autenticado')
-      .addTag('Viagens', 'Criacao, painel pessoal e edicao de viagens (RF04 a RF07)')
+      .addTag('Viagens', 'Criar, listar, editar e excluir viagens')
       .addTag('Destinos - Catalogo', 'Cidades cadastradas na plataforma (RF09, RF10)')
       .addTag('Destinos - Viagem', 'Roteiro: destinos da viagem em ordem de visita (RF08)')
       .addTag('Atividades - Catalogo', 'Catalogo publico de atividades (RF23 a RF25)')
