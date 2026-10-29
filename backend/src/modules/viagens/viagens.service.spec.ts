@@ -73,8 +73,11 @@ describe('ViagensService', () => {
       expect(viagem.nome).toBe('Eurotrip 2027');
       expect(viagem.descricao).toBe('Roteiro de 15 dias');
       // O dia gravado nao pode variar com o fuso do servidor.
-      expect(viagem.dataInicio?.toISOString()).toBe('2027-01-10T00:00:00.000Z');
-      expect(viagem.dataFim?.toISOString()).toBe('2027-01-25T00:00:00.000Z');
+      const gravado = prisma.viagem.create.mock.calls[0][0].data;
+      expect(gravado.dataInicio.toISOString()).toBe('2027-01-10T00:00:00.000Z');
+      // E volta no mesmo formato em que chegou.
+      expect(viagem.dataInicio).toBe('2027-01-10');
+      expect(viagem.dataFim).toBe('2027-01-25');
     });
 
     it('aceita viagem sem datas definidas', async () => {
@@ -139,10 +142,14 @@ describe('ViagensService', () => {
     it('muda so o status e mantem as datas gravadas', async () => {
       const viagem = await service.atualizar('A3KD9F2P', { status: StatusViagem.CONFIRMADA });
 
-      expect(viagem).toMatchObject({
-        status: StatusViagem.CONFIRMADA,
+      expect(prisma.viagem.update.mock.calls[0][0].data).toMatchObject({
         dataInicio: INICIO_GRAVADO,
         dataFim: FIM_GRAVADO,
+      });
+      expect(viagem).toMatchObject({
+        status: StatusViagem.CONFIRMADA,
+        dataInicio: '2027-01-10',
+        dataFim: '2027-01-25',
       });
       expect(viagem.nome).toBeUndefined();
     });

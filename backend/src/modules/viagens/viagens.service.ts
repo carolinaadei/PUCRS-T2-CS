@@ -4,7 +4,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, StatusViagem } from '@prisma/client';
+import { Prisma, StatusViagem, Viagem } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { PaginacaoDto, RespostaPaginada } from '../../common/dto/paginacao.dto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,6 +15,9 @@ import { CriarViagemDto } from './dto/criar-viagem.dto';
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const TAMANHO_CODIGO = 8;
 const MAX_TENTATIVAS_CODIGO = 5;
+
+/** Dia (aaaa-mm-dd) de uma data da coluna DATE, que o Prisma entrega a meia-noite UTC. */
+const paraDia = (data: Date) => data.toISOString().slice(0, 10);
 
 @Injectable()
 export class ViagensService {
@@ -30,7 +33,7 @@ export class ViagensService {
     // Colisao de codigo e improvavel, mas nao impossivel: tentamos novamente.
     for (let tentativa = 0; tentativa < MAX_TENTATIVAS_CODIGO; tentativa++) {
       try {
-        return await this.prisma.viagem.create({
+        const viagem = await this.prisma.viagem.create({
           data: {
             id: this.gerarCodigoConvite(),
             nome: dto.nome,
@@ -41,6 +44,8 @@ export class ViagensService {
             criadoPor: usuarioId,
           },
         });
+
+        return this.comDatasDoDia(viagem);
       } catch (erro) {
         const ehColisaoDeCodigo =
           erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002';
@@ -78,7 +83,11 @@ export class ViagensService {
       this.prisma.viagem.count({ where: filtro }),
     ]);
 
-    return new RespostaPaginada(itens, total, paginacao);
+    return new RespostaPaginada(
+      itens.map((viagem) => this.comDatasDoDia(viagem)),
+      total,
+      paginacao,
+    );
   }
 
   /** Detalhe da viagem. O acesso ja foi validado pelo AcessoViagemGuard (RN06). */
@@ -103,7 +112,7 @@ export class ViagensService {
       throw new NotFoundException(`Viagem ${viagemId} nao encontrada`);
     }
 
-    return viagem;
+    return this.comDatasDoDia(viagem);
   }
 
   /**
@@ -124,7 +133,7 @@ export class ViagensService {
 
     this.validarPeriodo(dataInicio, dataFim);
 
-    return this.prisma.viagem.update({
+    const viagem = await this.prisma.viagem.update({
       where: { id: viagemId },
       data: {
         // Nome e status sao obrigatorios: null vale como campo omitido.
@@ -135,6 +144,8 @@ export class ViagensService {
         status: dto.status ?? undefined,
       },
     });
+
+    return this.comDatasDoDia(viagem);
   }
 
   /** RF05 - excluir viagem (exige CRIADOR). Destinos, membros e orcamento caem em cascata. */
@@ -154,11 +165,23 @@ export class ViagensService {
     const data = new Date(`${valor}T00:00:00.000Z`);
 
     // Descarta dias inexistentes (ex.: 2027-02-31), que o Date normalizaria em silencio.
-    if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== valor) {
+    if (Number.isNaN(data.getTime()) || paraDia(data) !== valor) {
       throw new BadRequestException(`A data de ${campo} ${valor} nao existe no calendario`);
     }
 
     return data;
+  }
+
+  /**
+   * Devolve as datas gerais como aaaa-mm-dd, o mesmo formato em que chegam. O
+   * instante (2027-01-10T00:00:00.000Z) faria um front no fuso do Brasil exibir 09/01.
+   */
+  private comDatasDoDia<T extends Pick<Viagem, 'dataInicio' | 'dataFim'>>(viagem: T) {
+    return {
+      ...viagem,
+      dataInicio: viagem.dataInicio && paraDia(viagem.dataInicio),
+      dataFim: viagem.dataFim && paraDia(viagem.dataFim),
+    };
   }
 
   /** RF04, RF05 - as datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
