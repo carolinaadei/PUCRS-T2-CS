@@ -17,7 +17,22 @@ async function bootstrap() {
   const prefixo = config.get<string>('prefixoApi')!;
 
   app.setGlobalPrefix(prefixo);
-  app.use(helmet());
+  app.disable('etag');
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginOpenerPolicy: false,
+      crossOriginResourcePolicy: false,
+      originAgentCluster: false,
+      referrerPolicy: false,
+      strictTransportSecurity: false,
+      xDnsPrefetchControl: false,
+      xDownloadOptions: false,
+      xFrameOptions: false,
+      xPermittedCrossDomainPolicies: false,
+      xXssProtection: false,
+    }),
+  );
 
   const origem = config.get<string>('corsOrigin')!;
   app.enableCors({ origin: origem, credentials: origem !== '*' });

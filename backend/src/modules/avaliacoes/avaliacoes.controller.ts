@@ -71,7 +71,7 @@ export class AvaliacoesController {
   @Delete('avaliacoes/:avaliacaoId')
   @ApiAutenticado()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiParam({ name: 'avaliacaoId', description: 'Id da avaliacao', example: 7 })
+  @ApiParam({ name: 'avaliacaoId', description: 'Id da avaliacao', example: 1 })
   @ApiOperation({
     summary: 'Remover a propria avaliacao',
     description: 'So o autor pode remover. Recalcula a media da atividade.',

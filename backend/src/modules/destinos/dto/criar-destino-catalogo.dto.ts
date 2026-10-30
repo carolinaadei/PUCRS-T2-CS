@@ -13,7 +13,7 @@ import {
 
 /** RF09 - cada destino do catalogo representa uma cidade. */
 export class CriarDestinoCatalogoDto {
-  @ApiProperty({ example: 'Lisboa', description: 'Nome da cidade' })
+  @ApiProperty({ example: 'Porto', description: 'Nome da cidade' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)
@@ -25,27 +25,27 @@ export class CriarDestinoCatalogoDto {
   @MaxLength(80)
   pais?: string;
 
-  @ApiPropertyOptional({ enum: CategoriaDestino })
+  @ApiPropertyOptional({ enum: CategoriaDestino, example: CategoriaDestino.CULTURAL })
   @IsEnum(CategoriaDestino)
   @IsOptional()
   categoria?: CategoriaDestino;
 
-  @ApiPropertyOptional({ example: 'Capital portuguesa, a beira do Tejo' })
+  @ApiPropertyOptional({ example: 'Cidade historica as margens do Rio Douro.' })
   @IsString()
   @IsOptional()
   descricao?: string;
 
-  @ApiPropertyOptional({ example: 38.7223 })
+  @ApiPropertyOptional({ example: 41.1579 })
   @IsLatitude()
   @IsOptional()
   latitude?: number;
 
-  @ApiPropertyOptional({ example: -9.1393 })
+  @ApiPropertyOptional({ example: -8.6291 })
   @IsLongitude()
   @IsOptional()
   longitude?: number;
 
-  @ApiPropertyOptional({ example: 'https://exemplo.com/lisboa.jpg' })
+  @ApiPropertyOptional({ example: 'https://exemplo.com/porto.jpg' })
   @IsUrl()
   @IsOptional()
   @MaxLength(500)

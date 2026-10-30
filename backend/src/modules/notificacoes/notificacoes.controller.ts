@@ -65,7 +65,7 @@ export class NotificacoesController {
     name: 'notificacaoId',
     type: Number,
     description: 'Id da notificacao',
-    example: 15,
+    example: 1,
   })
   @ApiOkResponse({ type: NotificacaoDto })
   @ApiErro(404, 'Notificacao nao encontrada')

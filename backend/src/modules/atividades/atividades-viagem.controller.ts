@@ -38,7 +38,7 @@ const ApiParamAtividade = () =>
   ApiParam({
     name: 'atividadeId',
     description: 'Id da atividade na viagem (nao o do catalogo)',
-    example: 10,
+    example: 1,
   });
 
 /** 400 de validacao ou de um destino que nao pertence a esta viagem. */
@@ -64,7 +64,7 @@ export class AtividadesViagemController {
     required: false,
     type: Number,
     description: 'Filtra por um destino da viagem',
-    example: 4,
+    example: 1,
   })
   @ApiOperation({
     summary: 'RF14 - Listar atividades em ordem cronologica por destino',

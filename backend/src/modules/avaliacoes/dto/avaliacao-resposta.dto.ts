@@ -6,7 +6,7 @@ export class AutorAvaliacaoDto extends PickType(UsuarioResumoDto, ['id', 'nome']
 
 /** RF22, RF23 - avaliacao de uma atividade do catalogo. */
 export class AvaliacaoDto {
-  @ApiProperty({ example: 7, description: 'Usado em DELETE /avaliacoes/{avaliacaoId}' })
+  @ApiProperty({ example: 1, description: 'Usado em DELETE /avaliacoes/{avaliacaoId}' })
   id!: number;
 
   @ApiProperty({ example: 1 })

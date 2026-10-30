@@ -18,14 +18,14 @@ export class CatalogoAtividadeDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    example: 'Fortaleza do seculo XVI na margem do Tejo',
+    example: 'Fortificacao do seculo XVI as margens do Tejo.',
   })
   descricao!: string | null;
 
   @ApiProperty({ enum: TipoAtividade, example: TipoAtividade.PASSEIO })
   tipoAtividade!: TipoAtividade;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Av. Brasilia' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   local!: string | null;
 
   @ApiProperty({ type: String, nullable: true, example: 'Lisboa' })
@@ -40,16 +40,16 @@ export class CatalogoAtividadeDto {
   @ApiProperty({ type: Number, nullable: true, example: -9.216 })
   longitude!: number | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'ChIJ1Ww5Hc80GQ0RXkYcB6Ew3xE' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   googlePlaceId!: string | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'https://exemplo.com/torre-belem.jpg' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   fotoUrl!: string | null;
 
-  @ApiProperty({ example: 'google_places', description: 'Origem do cadastro' })
+  @ApiProperty({ example: 'seed', description: 'Origem do cadastro' })
   fonte!: string;
 
-  @ApiProperty({ example: 4.6, description: 'Media das notas, de 0 a 5 (0 sem avaliacoes)' })
+  @ApiProperty({ example: 0, description: 'Media das notas, de 0 a 5 (0 sem avaliacoes)' })
   mediaAvaliacao!: number;
 
   @ApiProperty({ example: '2026-09-15T10:00:00.000Z' })
@@ -62,7 +62,7 @@ export class PaginaAtividadesDto extends PaginaBaseDto {
 }
 
 export class ContagemAvaliacoesDto {
-  @ApiProperty({ example: 12 })
+  @ApiProperty({ example: 0 })
   avaliacoes!: number;
 }
 
@@ -80,10 +80,10 @@ export class AtividadeDetalheDto extends AtividadeDestaqueDto {
 
 /** RF12, RF13 - atividade agendada dentro de um destino da viagem. */
 export class AtividadeViagemDto {
-  @ApiProperty({ example: 10, description: 'Id da atividade na viagem: e o {atividadeId}' })
+  @ApiProperty({ example: 1, description: 'Id da atividade na viagem: e o {atividadeId}' })
   id!: number;
 
-  @ApiProperty({ example: 4 })
+  @ApiProperty({ example: 1 })
   destinoViagemId!: number;
 
   @ApiProperty({ example: 1 })
@@ -98,12 +98,12 @@ export class AtividadeViagemDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    example: '250.5',
+    example: '120',
     description: 'Custo previsto (Decimal como string)',
   })
   custoPrevisto!: string | null;
 
-  @ApiProperty({ enum: StatusAtividade, example: StatusAtividade.PENDENTE })
+  @ApiProperty({ enum: StatusAtividade, example: StatusAtividade.CONFIRMADA })
   status!: StatusAtividade;
 
   @ApiProperty({ type: CatalogoAtividadeDto })

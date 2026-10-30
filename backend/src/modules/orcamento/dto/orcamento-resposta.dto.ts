@@ -5,14 +5,14 @@ export class OrcamentoDto {
   @ApiProperty({ example: 1 })
   id!: number;
 
-  @ApiProperty({ example: 'A3KD9F2P' })
+  @ApiProperty({ example: 'DEMO2027' })
   viagemId!: string;
 
   @ApiProperty({ example: '12000', description: 'Orcamento total (Decimal como string)' })
   valorTotal!: string;
 
   @ApiProperty({
-    example: '8400',
+    example: '120',
     description: 'Soma dos custos previstos das atividades (Decimal como string)',
   })
   previstoAtividades!: string;
