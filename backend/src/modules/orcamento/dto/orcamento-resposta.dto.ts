@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-/** RF15, RF16 - orcamento da viagem. Os valores Decimal chegam como string. */
+/** Orcamento da viagem. Os valores Decimal chegam como string. */
 export class OrcamentoDto {
   @ApiProperty({ example: 1 })
   id!: number;

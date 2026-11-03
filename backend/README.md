@@ -173,9 +173,10 @@ Todas sob o prefixo `/api`.
 | `POST` | `/viagens/:viagemId/atividades` | RF12, RF13 | Editor |
 | `PATCH` | `/viagens/:viagemId/atividades/:atividadeId` | RF13 | Editor |
 | `DELETE` | `/viagens/:viagemId/atividades/:atividadeId` | RF13 | Editor |
-| `GET` | `/viagens/:viagemId/orcamento` | RF15 | Membro |
+| `GET` | `/viagens/:viagemId/orcamento` | RF15, RF16 | Membro |
 | `GET` | `/viagens/:viagemId/orcamento/resumo` | RF17 | Membro |
 | `PUT` | `/viagens/:viagemId/orcamento` | RF15 | Editor |
+| `DELETE` | `/viagens/:viagemId/orcamento` | RN02 | Editor |
 | `POST` | `/viagens/:viagemId/membros/entrar` | RF18 | Autenticado |
 | `GET` | `/viagens/:viagemId/membros` | RF19 | Membro |
 | `PATCH` | `/viagens/:viagemId/membros/:membroId` | RF20 | Criador |
@@ -200,9 +201,13 @@ Registradas aqui porque vão além do que a documentação especifica:
    anterior. O documento não define o comportamento; esta escolha evita spam de reviews.
 4. **`catalogo_atividade.media_avaliacao` e `orcamento.previsto_atividades` são
    recalculados a cada escrita**, mantendo consistentes os campos que o DER define
-   como derivados (usados nos filtros do RF24 e no painel do RF17).
+   como derivados (usados nos filtros do RF24 e no painel do RF17). O previsto
+   acompanha também a remoção de um destino, que leva as atividades em cascata.
 5. **`bcryptjs` no lugar de `bcrypt`** — mesma API, sem compilação nativa, o que
    evita depender do Visual Studio Build Tools em máquinas Windows.
+6. **O orçamento total precisa ser maior que zero** (RF15) — zero não serve de base
+   para os percentuais do RF17. Para deixar a viagem sem orçamento, o editor usa o
+   `DELETE`; os custos continuam nas atividades e voltam a contar num novo orçamento.
 
 ## Pendências mapeadas
 

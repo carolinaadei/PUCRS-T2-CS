@@ -185,13 +185,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       // O id e o proprio codigo de convite: 8 caracteres do alfabeto sem ambiguidade.
       expect(viagemId).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
       expect(body.status).toBe('EM_PLANEJAMENTO');
+      // As datas voltam no formato em que foram enviadas, sem hora nem fuso.
+      expect(body).toMatchObject({ dataInicio: '2027-01-10', dataFim: '2027-01-25' });
     });
 
     it('GET /api/viagens lista o painel pessoal paginado', async () => {
       const { body } = await http().get('/api/viagens').set(comToken(tokenCriador)).expect(200);
 
       expect(body.total).toBe(1);
-      expect(body.itens[0].id).toBe(viagemId);
+      expect(body.itens[0]).toMatchObject({ id: viagemId, dataInicio: '2027-01-10' });
     });
 
     it('GET /api/viagens/:id devolve o detalhe ao criador', async () => {
@@ -201,6 +203,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body.criador.email).toBe('ana@teste.com');
+      expect(body.dataInicio).toBe('2027-01-10');
       expect(body.membros).toEqual([]);
       expect(body.destinos).toEqual([]);
     });
@@ -217,6 +220,24 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
 
       expect(body.nome).toBe('Eurotrip 2027 - revisada');
       expect(body.status).toBe('CONFIRMADA');
+    });
+
+    it('PATCH /api/viagens/:id confere o novo fim com o inicio ja gravado (400)', () =>
+      http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ dataFim: '2027-01-05' })
+        .expect(400));
+
+    it('PATCH /api/viagens/:id com null apaga descricao e datas', async () => {
+      const { body } = await http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ descricao: null, dataInicio: null, dataFim: null })
+        .expect(200);
+
+      expect(body).toMatchObject({ descricao: null, dataInicio: null, dataFim: null });
+      expect(body.nome).toBe('Eurotrip 2027 - revisada');
     });
   });
 
@@ -386,9 +407,23 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Orcamento (RF15 a RF17)', () => {
+  describe('Orcamento', () => {
     it('GET /api/viagens/:id/orcamento responde 404 antes de ser definido', () =>
       http().get(`/api/viagens/${viagemId}/orcamento`).set(comToken(tokenCriador)).expect(404));
+
+    it('GET .../orcamento/resumo ja soma as atividades antes do orcamento existir', async () => {
+      const { body } = await http()
+        .get(`/api/viagens/${viagemId}/orcamento/resumo`)
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(body).toMatchObject({
+        orcamentoDefinido: false,
+        orcamentoTotal: 0,
+        totalPlanejado: 300,
+        percentualConsumido: 0,
+      });
+    });
 
     it('PUT /api/viagens/:id/orcamento define o total e ja soma as atividades', async () => {
       const { body } = await http()
@@ -408,12 +443,38 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body).toMatchObject({
+        orcamentoDefinido: true,
         orcamentoTotal: 1000,
         totalPlanejado: 300,
         saldoDisponivel: 700,
         percentualConsumido: 30,
       });
       expect(body.porCategoria).toEqual([{ tipoAtividade: 'PASSEIO', total: 300, percentual: 30 }]);
+    });
+
+    it('DELETE /api/viagens/:id/orcamento remove, e o PUT define de novo', async () => {
+      await http()
+        .delete(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(204);
+
+      await http()
+        .get(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(404);
+      await http()
+        .delete(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(404);
+
+      // Os custos ficam nas atividades: o novo orcamento ja nasce com o previsto.
+      const { body } = await http()
+        .put(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .send({ valorTotal: 1000 })
+        .expect(200);
+
+      expect(body.previstoAtividades).toBe('300');
     });
   });
 
@@ -574,7 +635,13 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.previstoAtividades).toBe('0');
     });
 
-    it('DELETE .../destinos/:id remove o trecho do roteiro', async () => {
+    it('DELETE .../destinos/:id remove o trecho e tira os custos dele do orcamento', async () => {
+      await http()
+        .post(`/api/viagens/${viagemId}/atividades`)
+        .set(comToken(tokenCriador))
+        .send({ destinoViagemId, catalogoAtividadeId: atividadeCatalogoId, custoPrevisto: 120 })
+        .expect(201);
+
       await http()
         .delete(`/api/viagens/${viagemId}/destinos/${destinoViagemId}`)
         .set(comToken(tokenCriador))
@@ -586,6 +653,14 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body).toEqual([]);
+
+      // A atividade caiu em cascata com o destino; o previsto acompanha.
+      const orcamento = await http()
+        .get(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(orcamento.body.previstoAtividades).toBe('0');
     });
 
     it('DELETE .../membros/:membroId remove o colaborador, que perde o acesso', async () => {

@@ -21,11 +21,11 @@ export class ViagemDto {
   })
   descricao!: string | null;
 
-  @ApiProperty({ type: Date, nullable: true, example: '2027-01-10T00:00:00.000Z' })
-  dataInicio!: Date | null;
+  @ApiProperty({ type: String, format: 'date', nullable: true, example: '2027-01-10' })
+  dataInicio!: string | null;
 
-  @ApiProperty({ type: Date, nullable: true, example: '2027-01-25T00:00:00.000Z' })
-  dataFim!: Date | null;
+  @ApiProperty({ type: String, format: 'date', nullable: true, example: '2027-01-25' })
+  dataFim!: string | null;
 
   @ApiProperty({ enum: StatusViagem, example: StatusViagem.EM_PLANEJAMENTO })
   status!: StatusViagem;

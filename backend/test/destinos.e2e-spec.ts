@@ -43,6 +43,12 @@ describe('Modulo 3 - Destinos e Paises Visitados (e2e)', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    atividadeViagem: {
+      aggregate: jest.fn().mockResolvedValue({ _sum: { custoPrevisto: null } }),
+    },
+    orcamento: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   function tokenDe(usuario: { id: number; email: string }) {

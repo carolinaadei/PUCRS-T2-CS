@@ -2,11 +2,13 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { CategoriaDestino } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrcamentoService } from '../orcamento/orcamento.service';
 import { DestinosService } from './destinos.service';
 import { BuscarDestinosDto } from './dto/buscar-destinos.dto';
 
 describe('DestinosService', () => {
   let service: DestinosService;
+  let orcamentoService: { recalcularPrevisto: jest.Mock };
   let prisma: {
     destinoCatalogo: {
       findMany: jest.Mock;
@@ -26,6 +28,9 @@ describe('DestinosService', () => {
   };
 
   beforeEach(async () => {
+    orcamentoService = {
+      recalcularPrevisto: jest.fn().mockResolvedValue(undefined),
+    };
     prisma = {
       destinoCatalogo: {
         findMany: jest.fn(),
@@ -45,7 +50,11 @@ describe('DestinosService', () => {
     };
 
     const modulo = await Test.createTestingModule({
-      providers: [DestinosService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        DestinosService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: OrcamentoService, useValue: orcamentoService },
+      ],
     }).compile();
 
     service = modulo.get(DestinosService);
