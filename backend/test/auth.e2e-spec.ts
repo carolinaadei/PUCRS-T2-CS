@@ -88,7 +88,7 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  describe('POST /api/auth/login (RF02)', () => {
+  describe('POST /api/auth/login', () => {
     it('deve autenticar com credenciais validas e retornar 200 com token e usuario', async () => {
       const resposta = await request(app.getHttpServer())
         .post('/api/auth/login')
@@ -144,7 +144,7 @@ describe('Auth (e2e)', () => {
     });
   });
 
-  describe('POST /api/auth/logout (RF02)', () => {
+  describe('POST /api/auth/logout', () => {
     it('deve retornar 200 com mensagem de sucesso quando autenticado', async () => {
       const resposta = await request(app.getHttpServer())
         .post('/api/auth/logout')

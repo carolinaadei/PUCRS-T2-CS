@@ -40,7 +40,7 @@ export class UsuariosController {
 
   @Get('eu/paises-visitados')
   @ApiOperation({
-    summary: 'RF11 - Paises visitados (nao implementado)',
+    summary: 'Paises visitados (nao implementado)',
     description:
       'Paises dos destinos das viagens concluidas do usuario, para o mapa (jsVectormap).',
   })
@@ -49,6 +49,6 @@ export class UsuariosController {
   paisesVisitados(): never {
     // TODO (RF11 - prioridade Media): paises de `destino_catalogo` nas viagens
     // CONCLUIDAS em que o usuario e criador ou membro, convertidos para ISO alfa-2.
-    throw new NotImplementedException('RF11 ainda nao implementado');
+    throw new NotImplementedException('Paises visitados ainda nao implementados');
   }
 }

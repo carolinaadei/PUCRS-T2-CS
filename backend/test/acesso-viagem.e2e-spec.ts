@@ -65,7 +65,7 @@ describe('AcessoViagemGuard (e2e)', () => {
     await app.close();
   });
 
-  it('RN06 - responde 404 para quem nao participa da viagem', async () => {
+  it('responde 404 para quem nao participa da viagem', async () => {
     const token = tokenDe(ESTRANHO);
     comViagemPadrao(ESTRANHO.id);
 
@@ -75,7 +75,7 @@ describe('AcessoViagemGuard (e2e)', () => {
       .expect(404);
   });
 
-  it('RN03 - VISUALIZADOR nao pode editar a viagem (403)', async () => {
+  it('VISUALIZADOR nao pode editar a viagem (403)', async () => {
     const token = tokenDe(VISUALIZADOR);
     comViagemPadrao(VISUALIZADOR.id);
 
@@ -86,7 +86,7 @@ describe('AcessoViagemGuard (e2e)', () => {
       .expect(403);
   });
 
-  it('RN02 - o criador pode editar a viagem', async () => {
+  it('o criador pode editar a viagem', async () => {
     const token = tokenDe(CRIADOR);
     comViagemPadrao(CRIADOR.id);
     prismaMock.viagem.findUniqueOrThrow.mockResolvedValue({ dataInicio: null, dataFim: null });
@@ -99,7 +99,7 @@ describe('AcessoViagemGuard (e2e)', () => {
       .expect(200);
   });
 
-  it('RN04 - somente o criador exclui a viagem', async () => {
+  it('somente o criador exclui a viagem', async () => {
     const token = tokenDe(VISUALIZADOR);
     comViagemPadrao(VISUALIZADOR.id);
 
@@ -109,7 +109,7 @@ describe('AcessoViagemGuard (e2e)', () => {
       .expect(403);
   });
 
-  it('RF03 - token emitido antes de redefinir a senha deixa de valer (401)', async () => {
+  it('token emitido antes de redefinir a senha deixa de valer (401)', async () => {
     const token = tokenDe(CRIADOR);
     comViagemPadrao(CRIADOR.id);
     // A redefinicao incrementa a versao de sessao; o token ainda carrega ver: 0.

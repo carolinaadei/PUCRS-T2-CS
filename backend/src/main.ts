@@ -44,7 +44,8 @@ async function bootstrap() {
     logger.warn(
       `Sem configuracao para: ${padroes.join(', ')}. ` +
         'Usando padroes de desenvolvimento - o envio de e-mail nao funciona e o ' +
-        'codigo do RF03 sai no log. Em producao estas variaveis sao obrigatorias.',
+        'codigo de recuperacao de senha sai no log. Em producao estas variaveis ' +
+        'sao obrigatorias.',
     );
   }
 

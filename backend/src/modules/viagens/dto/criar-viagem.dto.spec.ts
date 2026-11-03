@@ -20,7 +20,7 @@ describe('DTOs de viagem', () => {
     expect(dto).toMatchObject({ nome: 'Eurotrip 2027', descricao: 'Roteiro de 15 dias' });
   });
 
-  it('recusa nome so com espacos (RF04)', async () => {
+  it('recusa nome so com espacos', async () => {
     await expect(mensagensDoErro({ nome: '   ' })).resolves.toMatchObject({
       message: ['O nome da viagem nao pode ficar em branco'],
     });

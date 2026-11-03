@@ -64,7 +64,7 @@ const aplicar = (alvo: object, data: Dados) => {
   }
 };
 
-describe('Recuperacao de senha (e2e) - RF03', () => {
+describe('Recuperacao de senha (e2e)', () => {
   let app: INestApplication;
   let registros: Registro[];
   let usuario: { id: number; nome: string; email: string; senhaHash: string; versaoSessao: number };

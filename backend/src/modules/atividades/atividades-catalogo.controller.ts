@@ -43,7 +43,7 @@ export class AtividadesCatalogoController {
   @Publico()
   @Get()
   @ApiOperation({
-    summary: 'RF24, RN01 - Catalogo de atividades com busca e filtros',
+    summary: 'Catalogo de atividades com busca e filtros',
     description:
       'Publico. Busca por nome; filtros por tipo, cidade, pais e nota minima. ' +
       'Ordenado pela media de avaliacoes.',
@@ -57,7 +57,7 @@ export class AtividadesCatalogoController {
   @Publico()
   @Get('destaques')
   @ApiOperation({
-    summary: 'RF25 - Atividades mais bem avaliadas',
+    summary: 'Atividades mais bem avaliadas',
     description: 'Publico. As 10 melhores medias entre as atividades ja avaliadas.',
   })
   @ApiOkResponse({ type: [AtividadeDestaqueDto] })
@@ -68,7 +68,7 @@ export class AtividadesCatalogoController {
   @Publico()
   @Get(':id')
   @ApiOperation({
-    summary: 'RF23 - Pagina publica da atividade com media e reviews',
+    summary: 'Pagina publica da atividade com media e reviews',
     description: 'Publico. Traz as 20 avaliacoes mais recentes e o total de avaliacoes.',
   })
   @ApiParam({ name: 'id', description: 'Id da atividade no catalogo', example: 1 })

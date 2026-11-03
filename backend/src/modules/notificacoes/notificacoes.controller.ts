@@ -21,7 +21,7 @@ import {
 } from '../../common/swagger/api-respostas.decorator';
 import { NotificacaoDto, PaginaNotificacoesDto } from './dto/notificacao.dto';
 
-const PENDENTE = 'RF21 ainda nao implementado';
+const PENDENTE = 'Notificacoes ainda nao implementadas';
 
 /**
  * RF21 - contrato planejado das notificacoes in-app. As rotas respondem 501
