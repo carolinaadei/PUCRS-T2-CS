@@ -45,11 +45,17 @@ export class DestinosService {
   }
 
   criarNoCatalogo(dto: CriarDestinoCatalogoDto) {
+    const nome = dto.nome.trim();
+    const pais = dto.pais?.trim() || undefined;
+    if (!nome) {
+      throw new BadRequestException('O nome do destino nao pode ficar em branco');
+    }
+
     return this.prisma.destinoCatalogo.create({
       data: {
         ...dto,
-        nome: dto.nome.trim(),
-        pais: dto.pais?.trim(),
+        nome,
+        pais,
       },
     });
   }
