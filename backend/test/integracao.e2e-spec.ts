@@ -386,9 +386,23 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Orcamento (RF15 a RF17)', () => {
+  describe('Orcamento', () => {
     it('GET /api/viagens/:id/orcamento responde 404 antes de ser definido', () =>
       http().get(`/api/viagens/${viagemId}/orcamento`).set(comToken(tokenCriador)).expect(404));
+
+    it('GET .../orcamento/resumo ja soma as atividades antes do orcamento existir', async () => {
+      const { body } = await http()
+        .get(`/api/viagens/${viagemId}/orcamento/resumo`)
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(body).toMatchObject({
+        orcamentoDefinido: false,
+        orcamentoTotal: 0,
+        totalPlanejado: 300,
+        percentualConsumido: 0,
+      });
+    });
 
     it('PUT /api/viagens/:id/orcamento define o total e ja soma as atividades', async () => {
       const { body } = await http()
@@ -408,12 +422,38 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body).toMatchObject({
+        orcamentoDefinido: true,
         orcamentoTotal: 1000,
         totalPlanejado: 300,
         saldoDisponivel: 700,
         percentualConsumido: 30,
       });
       expect(body.porCategoria).toEqual([{ tipoAtividade: 'PASSEIO', total: 300, percentual: 30 }]);
+    });
+
+    it('DELETE /api/viagens/:id/orcamento remove, e o PUT define de novo', async () => {
+      await http()
+        .delete(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(204);
+
+      await http()
+        .get(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(404);
+      await http()
+        .delete(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(404);
+
+      // Os custos ficam nas atividades: o novo orcamento ja nasce com o previsto.
+      const { body } = await http()
+        .put(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .send({ valorTotal: 1000 })
+        .expect(200);
+
+      expect(body.previstoAtividades).toBe('300');
     });
   });
 
@@ -574,7 +614,13 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.previstoAtividades).toBe('0');
     });
 
-    it('DELETE .../destinos/:id remove o trecho do roteiro', async () => {
+    it('DELETE .../destinos/:id remove o trecho e tira os custos dele do orcamento', async () => {
+      await http()
+        .post(`/api/viagens/${viagemId}/atividades`)
+        .set(comToken(tokenCriador))
+        .send({ destinoViagemId, catalogoAtividadeId: atividadeCatalogoId, custoPrevisto: 120 })
+        .expect(201);
+
       await http()
         .delete(`/api/viagens/${viagemId}/destinos/${destinoViagemId}`)
         .set(comToken(tokenCriador))
@@ -586,6 +632,14 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body).toEqual([]);
+
+      // A atividade caiu em cascata com o destino; o previsto acompanha.
+      const orcamento = await http()
+        .get(`/api/viagens/${viagemId}/orcamento`)
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(orcamento.body.previstoAtividades).toBe('0');
     });
 
     it('DELETE .../membros/:membroId remove o colaborador, que perde o acesso', async () => {
