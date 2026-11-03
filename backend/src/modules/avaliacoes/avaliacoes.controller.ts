@@ -32,11 +32,19 @@ import { CriarAvaliacaoDto } from './dto/criar-avaliacao.dto';
 const ApiParamAtividade = () =>
   ApiParam({ name: 'atividadeId', description: 'Id da atividade no catalogo', example: 1 });
 
+/**
+ * Controller responsavel pelas rotas de avaliacao de atividades (RF22, RF23, RN01 e RN05).
+ * Gerencia a criacao, atualizacao, consulta publica e exclusao de reviews feitas por usuarios.
+ */
 @ApiTags('Avaliacoes')
 @Controller()
 export class AvaliacoesController {
   constructor(private readonly avaliacoesService: AvaliacoesService) {}
 
+  /**
+   * RF23, RN01 - Lista as reviews de uma atividade do catalogo em ordem decrescente de criacao.
+   * Rota publica, acessivel inclusive para visitantes nao autenticados.
+   */
   @Publico()
   @Get('atividades/:atividadeId/avaliacoes')
   @ApiParamAtividade()
@@ -45,10 +53,16 @@ export class AvaliacoesController {
     description: 'Publico. Mais recentes primeiro; lista vazia se nao houver.',
   })
   @ApiOkResponse({ type: [AvaliacaoDto] })
+  @ApiErro(404, 'Atividade nao encontrada no catalogo')
   listar(@Param('atividadeId', ParseIntPipe) atividadeId: number) {
     return this.avaliacoesService.listarDaAtividade(atividadeId);
   }
 
+  /**
+   * RF22, RN05 - Registra ou atualiza a avaliacao (nota de 1 a 5 estrelas e comentario opcional)
+   * de uma atividade por um usuario autenticado. Cada usuario pode avaliar a mesma atividade apenas uma vez;
+   * avaliacoes subsequentes atualizam a nota anterior e recalculam a media geral.
+   */
   @Post('atividades/:atividadeId/avaliacoes')
   @ApiAutenticado()
   @ApiParamAtividade()
@@ -68,6 +82,10 @@ export class AvaliacoesController {
     return this.avaliacoesService.avaliar(usuario.id, atividadeId, dto);
   }
 
+  /**
+   * RF22 - Exclui a avaliacao informada. Apenas o autor original tem permissao para remove-la.
+   * Recalcula a media geral da atividade apos a exclusao.
+   */
   @Delete('avaliacoes/:avaliacaoId')
   @ApiAutenticado()
   @HttpCode(HttpStatus.NO_CONTENT)
