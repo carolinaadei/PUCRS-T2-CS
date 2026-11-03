@@ -101,7 +101,7 @@ export class DestinosService {
   async removerDaViagem(viagemId: string, destinoId: number) {
     await this.garantirDestinoDaViagem(viagemId, destinoId);
     await this.prisma.destinoViagem.delete({ where: { id: destinoId } });
-    // RF16 - as atividades do destino caem em cascata, e com elas os seus custos.
+    // As atividades do destino caem em cascata, e com elas os seus custos.
     await this.orcamentoService.recalcularPrevisto(viagemId);
   }
 

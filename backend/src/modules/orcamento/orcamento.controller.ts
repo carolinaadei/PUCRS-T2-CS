@@ -33,7 +33,6 @@ const SEM_ORCAMENTO = 'a viagem ainda nao tem orcamento definido';
 export class OrcamentoController {
   constructor(private readonly orcamentoService: OrcamentoService) {}
 
-  // RF15, RF16
   @Get()
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiOperation({
@@ -49,7 +48,6 @@ export class OrcamentoController {
     return this.orcamentoService.buscar(viagemId);
   }
 
-  // RF17
   @Get('resumo')
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiOperation({
@@ -66,7 +64,6 @@ export class OrcamentoController {
     return this.orcamentoService.resumir(viagemId);
   }
 
-  // RF15, RN02
   @Put()
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @ApiOperation({
@@ -85,7 +82,6 @@ export class OrcamentoController {
     return this.orcamentoService.definir(viagemId, dto);
   }
 
-  // RN02
   @Delete()
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @HttpCode(HttpStatus.NO_CONTENT)

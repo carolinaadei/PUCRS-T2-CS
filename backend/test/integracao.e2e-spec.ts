@@ -365,7 +365,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Orcamento (RF15 a RF17)', () => {
+  describe('Orcamento', () => {
     it('GET /api/viagens/:id/orcamento responde 404 antes de ser definido', () =>
       http().get(`/api/viagens/${viagemId}/orcamento`).set(comToken(tokenCriador)).expect(404));
 
@@ -410,7 +410,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.porCategoria).toEqual([{ tipoAtividade: 'PASSEIO', total: 300, percentual: 30 }]);
     });
 
-    it('DELETE /api/viagens/:id/orcamento remove, e o PUT define de novo (RN02)', async () => {
+    it('DELETE /api/viagens/:id/orcamento remove, e o PUT define de novo', async () => {
       await http()
         .delete(`/api/viagens/${viagemId}/orcamento`)
         .set(comToken(tokenCriador))
@@ -612,7 +612,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
 
       expect(body).toEqual([]);
 
-      // RF16 - a atividade caiu em cascata com o destino; o previsto acompanha.
+      // A atividade caiu em cascata com o destino; o previsto acompanha.
       const orcamento = await http()
         .get(`/api/viagens/${viagemId}/orcamento`)
         .set(comToken(tokenCriador))

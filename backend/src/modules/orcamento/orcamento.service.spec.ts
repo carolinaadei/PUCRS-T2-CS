@@ -54,7 +54,7 @@ describe('OrcamentoService', () => {
     service = modulo.get(OrcamentoService);
   });
 
-  describe('definir (RF15)', () => {
+  describe('definir', () => {
     it('cria ou substitui o total ja com a soma dos custos das atividades', async () => {
       somaDosCustos('300.5');
 
@@ -89,7 +89,7 @@ describe('OrcamentoService', () => {
     });
   });
 
-  describe('buscar (RF15)', () => {
+  describe('buscar', () => {
     it('devolve o orcamento gravado', async () => {
       const gravado = orcamentoDe('1000');
       prisma.orcamento.findUnique.mockResolvedValue(gravado);
@@ -106,7 +106,7 @@ describe('OrcamentoService', () => {
     });
   });
 
-  describe('remover (RN02)', () => {
+  describe('remover', () => {
     it('apaga o orcamento da viagem', async () => {
       prisma.orcamento.deleteMany.mockResolvedValue({ count: 1 });
 
@@ -124,7 +124,7 @@ describe('OrcamentoService', () => {
     });
   });
 
-  describe('recalcularPrevisto (RF16)', () => {
+  describe('recalcularPrevisto', () => {
     it('regrava a soma atual dos custos das atividades', async () => {
       somaDosCustos('480');
 
@@ -146,7 +146,7 @@ describe('OrcamentoService', () => {
     });
   });
 
-  describe('resumir (RF17)', () => {
+  describe('resumir', () => {
     it('calcula total planejado, saldo e percentual consumido', async () => {
       prisma.orcamento.findUnique.mockResolvedValue(orcamentoDe('12000'));
       prisma.atividadeViagem.findMany.mockResolvedValue([

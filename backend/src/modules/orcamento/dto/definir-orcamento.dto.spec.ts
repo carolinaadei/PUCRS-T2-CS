@@ -9,7 +9,7 @@ const validar = (corpo: object) =>
 const mensagensDoErro = (corpo: object) =>
   validar(corpo).catch((erro: BadRequestException) => erro.getResponse());
 
-describe('DefinirOrcamentoDto (RF15)', () => {
+describe('DefinirOrcamentoDto', () => {
   it('aceita valor com centavos', async () => {
     await expect(validar({ valorTotal: 12000.5 })).resolves.toEqual({ valorTotal: 12000.5 });
   });

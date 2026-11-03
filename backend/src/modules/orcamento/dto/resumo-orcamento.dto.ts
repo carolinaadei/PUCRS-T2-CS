@@ -15,7 +15,7 @@ export class GastoPorCategoriaDto {
   percentual!: number;
 }
 
-/** RF17 - painel de resumo financeiro. */
+/** Painel de resumo financeiro da viagem. */
 export class ResumoOrcamentoDto {
   @ApiProperty({
     example: true,

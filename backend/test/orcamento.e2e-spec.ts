@@ -9,7 +9,7 @@ import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 /**
- * Modulo 5 - Orcamento (RF15 a RF17, RN02, RN03, RN06) passando por controller,
+ * Orcamento da viagem passando por controller,
  * pipe de validacao e AcessoViagemGuard. Usa o Prisma mockado: nao exige PostgreSQL.
  */
 describe('Modulo de Orcamento (e2e)', () => {
@@ -90,7 +90,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     await app.close();
   });
 
-  describe('acesso (RN02, RN03, RN06)', () => {
+  describe('acesso', () => {
     it('exige token', () => http().get(ROTA).expect(401));
 
     it('esconde a viagem de quem nao participa dela (404)', async () => {
@@ -120,7 +120,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     });
   });
 
-  describe('PUT /orcamento (RF15)', () => {
+  describe('PUT /orcamento', () => {
     it('o EDITOR define o total, que volta junto com o previsto das atividades', async () => {
       const { body } = await http()
         .put(ROTA)
@@ -159,7 +159,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     });
   });
 
-  describe('GET /orcamento (RF15, RF16)', () => {
+  describe('GET /orcamento', () => {
     it('responde 404 com a explicacao enquanto nao ha orcamento', async () => {
       prismaMock.orcamento.findUnique.mockResolvedValue(null);
 
@@ -169,7 +169,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     });
   });
 
-  describe('GET /orcamento/resumo (RF17)', () => {
+  describe('GET /orcamento/resumo', () => {
     it('monta o painel com saldo e percentual por categoria', async () => {
       prismaMock.orcamento.findUnique.mockResolvedValue({
         id: 1,
@@ -204,7 +204,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     });
   });
 
-  describe('DELETE /orcamento (RN02)', () => {
+  describe('DELETE /orcamento', () => {
     it('o EDITOR remove o orcamento (204)', async () => {
       prismaMock.orcamento.deleteMany.mockResolvedValue({ count: 1 });
 
@@ -222,7 +222,7 @@ describe('Modulo de Orcamento (e2e)', () => {
     });
   });
 
-  describe('previsto das atividades (RF16)', () => {
+  describe('previsto das atividades', () => {
     it('remover um destino recalcula o previsto, ja que as atividades dele somem junto', async () => {
       prismaMock.destinoViagem.findUnique.mockResolvedValue({ viagemId: VIAGEM });
       prismaMock.destinoViagem.delete.mockResolvedValue({});

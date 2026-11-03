@@ -13,7 +13,7 @@ const ORDEM_DAS_CATEGORIAS = Object.values(TipoAtividade);
 export class OrcamentoService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** RF15 - cria ou substitui o orcamento total da viagem (relacao 1:1). */
+  /** Cria ou substitui o orcamento total da viagem (relacao 1:1). */
   async definir(viagemId: string, dto: DefinirOrcamentoDto) {
     const previstoAtividades = await this.somarCustosPrevistos(viagemId);
 
@@ -35,7 +35,7 @@ export class OrcamentoService {
   }
 
   /**
-   * RN02 - apaga o orcamento da viagem. Os custos previstos ficam nas
+   * Apaga o orcamento da viagem. Os custos previstos ficam nas
    * atividades, entao voltam a contar se um novo orcamento for definido.
    */
   async remover(viagemId: string): Promise<void> {
@@ -47,7 +47,7 @@ export class OrcamentoService {
   }
 
   /**
-   * RF16 - mantem `previsto_atividades` sincronizado com a soma dos custos
+   * Mantem `previsto_atividades` sincronizado com a soma dos custos
    * das atividades. Chamado pelos services de atividades e de destinos a cada
    * alteracao que mexe nesses custos.
    * Sem orcamento definido a viagem simplesmente nao tem o que atualizar.
@@ -62,7 +62,7 @@ export class OrcamentoService {
   }
 
   /**
-   * RF17 - painel de resumo financeiro da viagem. As contas sao feitas em
+   * Painel de resumo financeiro da viagem. As contas sao feitas em
    * Decimal, como no banco: somar centavos em ponto flutuante acumula erro.
    */
   async resumir(viagemId: string): Promise<ResumoOrcamentoDto> {

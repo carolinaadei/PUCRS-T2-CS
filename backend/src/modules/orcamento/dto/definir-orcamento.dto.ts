@@ -8,7 +8,7 @@ import { IsNumber, IsPositive, Max } from 'class-validator';
  */
 export const VALOR_MAXIMO_ORCAMENTO = 99_999_999.99;
 
-/** RF15 - definir o orcamento total da viagem. */
+/** Define o orcamento total da viagem. */
 export class DefinirOrcamentoDto {
   @ApiProperty({
     example: 12000.5,
