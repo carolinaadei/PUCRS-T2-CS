@@ -179,13 +179,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       // O id e o proprio codigo de convite: 8 caracteres do alfabeto sem ambiguidade.
       expect(viagemId).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
       expect(body.status).toBe('EM_PLANEJAMENTO');
+      // As datas voltam no formato em que foram enviadas, sem hora nem fuso.
+      expect(body).toMatchObject({ dataInicio: '2027-01-10', dataFim: '2027-01-25' });
     });
 
     it('GET /api/viagens lista o painel pessoal paginado', async () => {
       const { body } = await http().get('/api/viagens').set(comToken(tokenCriador)).expect(200);
 
       expect(body.total).toBe(1);
-      expect(body.itens[0].id).toBe(viagemId);
+      expect(body.itens[0]).toMatchObject({ id: viagemId, dataInicio: '2027-01-10' });
     });
 
     it('GET /api/viagens/:id devolve o detalhe ao criador', async () => {
@@ -195,6 +197,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
 
       expect(body.criador.email).toBe('ana@teste.com');
+      expect(body.dataInicio).toBe('2027-01-10');
       expect(body.membros).toEqual([]);
       expect(body.destinos).toEqual([]);
     });
@@ -211,6 +214,24 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
 
       expect(body.nome).toBe('Eurotrip 2027 - revisada');
       expect(body.status).toBe('CONFIRMADA');
+    });
+
+    it('PATCH /api/viagens/:id confere o novo fim com o inicio ja gravado (400)', () =>
+      http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ dataFim: '2027-01-05' })
+        .expect(400));
+
+    it('PATCH /api/viagens/:id com null apaga descricao e datas', async () => {
+      const { body } = await http()
+        .patch(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenCriador))
+        .send({ descricao: null, dataInicio: null, dataFim: null })
+        .expect(200);
+
+      expect(body).toMatchObject({ descricao: null, dataInicio: null, dataFim: null });
+      expect(body.nome).toBe('Eurotrip 2027 - revisada');
     });
   });
 
