@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RespostaPaginada } from '../../common/dto/paginacao.dto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrcamentoService } from '../orcamento/orcamento.service';
 import { AdicionarDestinoViagemDto } from './dto/adicionar-destino-viagem.dto';
 import { AtualizarDestinoViagemDto } from './dto/atualizar-destino-viagem.dto';
 import { BuscarDestinosDto } from './dto/buscar-destinos.dto';
@@ -9,7 +10,10 @@ import { CriarDestinoCatalogoDto } from './dto/criar-destino-catalogo.dto';
 
 @Injectable()
 export class DestinosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orcamentoService: OrcamentoService,
+  ) {}
 
   // ---------------------- Catalogo global ----------------------
 
@@ -97,6 +101,8 @@ export class DestinosService {
   async removerDaViagem(viagemId: string, destinoId: number) {
     await this.garantirDestinoDaViagem(viagemId, destinoId);
     await this.prisma.destinoViagem.delete({ where: { id: destinoId } });
+    // RF16 - as atividades do destino caem em cascata, e com elas os seus custos.
+    await this.orcamentoService.recalcularPrevisto(viagemId);
   }
 
   private async proximaOrdem(viagemId: string): Promise<number> {

@@ -41,7 +41,7 @@ export const criarDocumentoSwagger = (app: INestApplication): OpenAPIObject =>
       .addTag('Destinos - Viagem', 'Roteiro: destinos da viagem em ordem de visita (RF08)')
       .addTag('Atividades - Catalogo', 'Catalogo publico de atividades (RF23 a RF25)')
       .addTag('Atividades - Viagem', 'Atividades agendadas nos destinos (RF12 a RF14)')
-      .addTag('Orcamento', 'Orcamento e resumo financeiro (RF15 a RF17)')
+      .addTag('Orcamento', 'Definir o orcamento da viagem e acompanhar o resumo financeiro')
       .addTag('Colaboracao', 'Convite por codigo e permissoes (RF18 a RF20)')
       .addTag('Notificacoes', 'Avisos in-app de alteracoes na viagem (RF21)')
       .addTag('Avaliacoes', 'Notas e comentarios das atividades (RF22, RF23)')

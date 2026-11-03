@@ -97,7 +97,9 @@ export class DestinosViagemController {
   @ApiParamDestino()
   @ApiOperation({
     summary: 'RN02 - Remover destino da viagem',
-    description: 'Remove tambem as atividades do destino. Exige EDITOR.',
+    description:
+      'Remove tambem as atividades do destino e recalcula o previsto do orcamento (RF16). ' +
+      'Exige EDITOR.',
   })
   @ApiNoContentResponse({ description: 'Destino removido' })
   @ApiAcessoViagem(NivelAcessoViagem.EDITOR, 'destino nao encontrado nesta viagem')
