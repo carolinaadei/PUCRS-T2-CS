@@ -30,8 +30,8 @@ import {
   ApiParamViagem,
 } from '../../common/swagger/api-respostas.decorator';
 import { AtividadesService } from './atividades.service';
-import { AtividadeViagemDto, AtividadeViagemListaDto } from './dto/atividade-resposta.dto';
 import { AdicionarAtividadeViagemDto } from './dto/adicionar-atividade-viagem.dto';
+import { AtividadeViagemDto, AtividadeViagemListaDto } from './dto/atividade-resposta.dto';
 import { AtualizarAtividadeViagemDto } from './dto/atualizar-atividade-viagem.dto';
 
 const ApiParamAtividade = () =>
@@ -49,6 +49,10 @@ const ApiErroDestinoInvalido = () =>
     'O destino informado nao pertence a esta viagem',
   );
 
+/**
+ * Controller responsavel pelo gerenciamento das atividades dentro dos destinos de uma viagem
+ * (Modulo 4 - RF12, RF13 e RF14). Protegido por `AcessoViagemGuard` (RN02, RN03 e RN06).
+ */
 @ApiTags('Atividades - Viagem')
 @ApiAutenticado()
 @Controller('viagens/:viagemId/atividades')
@@ -57,6 +61,10 @@ const ApiErroDestinoInvalido = () =>
 export class AtividadesViagemController {
   constructor(private readonly atividadesService: AtividadesService) {}
 
+  /**
+   * RF14 - Lista as atividades da viagem em ordem cronologica por destino.
+   * Permite filtrar opcionalmente por um destino especifico da viagem (`destinoViagemId`).
+   */
   @Get()
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiQuery({
@@ -71,14 +79,19 @@ export class AtividadesViagemController {
     description: 'Ordenadas pela ordem de visita do destino e depois pelo horario.',
   })
   @ApiOkResponse({ type: [AtividadeViagemListaDto] })
+  @ApiErroDestinoInvalido()
   @ApiAcessoViagem(NivelAcessoViagem.MEMBRO)
-  listar(@Param('viagemId') viagemId: string, @Query('destinoViagemId') destinoViagemId?: string) {
-    return this.atividadesService.listarDaViagem(
-      viagemId,
-      destinoViagemId ? Number(destinoViagemId) : undefined,
-    );
+  listar(
+    @Param('viagemId') viagemId: string,
+    @Query('destinoViagemId', new ParseIntPipe({ optional: true })) destinoViagemId?: number,
+  ) {
+    return this.atividadesService.listarDaViagem(viagemId, destinoViagemId);
   }
 
+  /**
+   * RF12, RF13, RN02 - Adiciona uma atividade do catalogo dentro de um destino da viagem,
+   * definindo horario, duracao estimada, custo previsto e status, e atualizando o orcamento (RF16).
+   */
   @Post()
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @ApiOperation({
@@ -94,6 +107,10 @@ export class AtividadesViagemController {
     return this.atividadesService.adicionarNaViagem(viagemId, dto);
   }
 
+  /**
+   * RF13, RN02 - Atualiza parcialmente uma atividade agendada na viagem
+   * (destino, data/horario, duracao estimada, custo previsto ou status) e recalcula o orcamento.
+   */
   @Patch(':atividadeId')
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @ApiParamAtividade()
@@ -112,6 +129,9 @@ export class AtividadesViagemController {
     return this.atividadesService.atualizarNaViagem(viagemId, atividadeId, dto);
   }
 
+  /**
+   * RN02, RF16 - Remove uma atividade agendada da viagem e recalcula o previsto do orcamento.
+   */
   @Delete(':atividadeId')
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @HttpCode(HttpStatus.NO_CONTENT)
