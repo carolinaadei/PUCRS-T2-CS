@@ -13,6 +13,12 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
+  // O Nest liga o nivel debug por padrao. Em producao ele fica de fora: e nele
+  // que sai o codigo de recuperacao de senha, atalho apenas de desenvolvimento.
+  if (config.get<string>('ambiente') === 'production') {
+    app.useLogger(['log', 'warn', 'error', 'fatal']);
+  }
+
   const porta = config.get<number>('porta')!;
   const prefixo = config.get<string>('prefixoApi')!;
 
