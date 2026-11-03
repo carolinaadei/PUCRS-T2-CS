@@ -48,7 +48,7 @@ describe('ViagensService', () => {
     service = modulo.get(ViagensService);
   });
 
-  describe('criar (RF04)', () => {
+  describe('criar', () => {
     beforeEach(() => {
       prisma.viagem.create.mockImplementation(({ data }) => Promise.resolve(data));
     });
@@ -127,7 +127,7 @@ describe('ViagensService', () => {
     });
   });
 
-  describe('atualizar (RF05, RF07)', () => {
+  describe('atualizar', () => {
     const INICIO_GRAVADO = new Date('2027-01-10T00:00:00.000Z');
     const FIM_GRAVADO = new Date('2027-01-25T00:00:00.000Z');
 
@@ -195,7 +195,7 @@ describe('ViagensService', () => {
     });
   });
 
-  it('lista viagens criadas pelo usuario e aquelas em que e colaborador (RF06)', async () => {
+  it('lista viagens criadas pelo usuario e aquelas em que e colaborador', async () => {
     prisma.viagem.findMany.mockResolvedValue([]);
     prisma.viagem.count.mockResolvedValue(0);
 

@@ -48,7 +48,7 @@ describe('Documento OpenAPI (e2e)', () => {
     expect(documento.info.version).toBe('0.1.0');
   });
 
-  it('documenta todas as rotas de autenticacao (RF01 a RF03)', () => {
+  it('documenta todas as rotas de autenticacao', () => {
     expect(Object.keys(documento.paths)).toEqual(
       expect.arrayContaining([
         '/api/auth/registrar',
@@ -88,7 +88,7 @@ describe('Documento OpenAPI (e2e)', () => {
     expect(foraDaTag.map(([rota]) => rota)).toEqual([]);
   });
 
-  it('mantem as rotas publicas do RF03 sem exigir token', () => {
+  it('mantem as rotas publicas de autenticacao sem exigir token', () => {
     const publicas = [
       '/api/auth/registrar',
       '/api/auth/login',

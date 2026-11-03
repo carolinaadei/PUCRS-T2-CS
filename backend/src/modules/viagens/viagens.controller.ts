@@ -66,7 +66,7 @@ export class ViagensController {
       'ordenadas pela data de inicio. Resultado paginado.',
   })
   @ApiOkResponse({ type: PaginaViagensDto })
-  @ApiErroValidacao('limite must not be greater than 100')
+  @ApiErroValidacao('O limite deve ser no maximo 100')
   listar(@UsuarioAtual() usuario: UsuarioAutenticado, @Query() paginacao: PaginacaoDto) {
     return this.viagensService.listarDoUsuario(usuario.id, paginacao);
   }

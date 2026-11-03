@@ -91,7 +91,7 @@ describe('Avaliacoes (e2e)', () => {
 
   // ---------------------- GET /api/atividades/:id/avaliacoes ----------------------
 
-  describe('GET /api/atividades/:atividadeId/avaliacoes (RF23, RN01)', () => {
+  describe('GET /api/atividades/:atividadeId/avaliacoes', () => {
     it('deve listar avaliacoes publicamente para visitantes sem exigir token', async () => {
       prismaMock.avaliacao.findMany.mockResolvedValue([
         {
@@ -122,7 +122,7 @@ describe('Avaliacoes (e2e)', () => {
 
   // ---------------------- POST /api/atividades/:id/avaliacoes ----------------------
 
-  describe('POST /api/atividades/:atividadeId/avaliacoes (RF22, RN05)', () => {
+  describe('POST /api/atividades/:atividadeId/avaliacoes', () => {
     it('deve rejeitar avaliacao sem token com 401 Unauthorized', async () => {
       await request(app.getHttpServer())
         .post('/api/atividades/10/avaliacoes')
@@ -187,7 +187,7 @@ describe('Avaliacoes (e2e)', () => {
 
   // ---------------------- DELETE /api/avaliacoes/:id ----------------------
 
-  describe('DELETE /api/avaliacoes/:avaliacaoId (RF22)', () => {
+  describe('DELETE /api/avaliacoes/:avaliacaoId', () => {
     it('deve rejeitar exclusao sem token com 401 Unauthorized', async () => {
       await request(app.getHttpServer()).delete('/api/avaliacoes/1').expect(401);
     });
