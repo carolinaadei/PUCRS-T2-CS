@@ -18,21 +18,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefixo);
   app.disable('etag');
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginOpenerPolicy: false,
-      crossOriginResourcePolicy: false,
-      originAgentCluster: false,
-      referrerPolicy: false,
-      strictTransportSecurity: false,
-      xDnsPrefetchControl: false,
-      xDownloadOptions: false,
-      xFrameOptions: false,
-      xPermittedCrossDomainPolicies: false,
-      xXssProtection: false,
-    }),
-  );
+  app.use(helmet());
 
   const origem = config.get<string>('corsOrigin')!;
   app.enableCors({ origin: origem, credentials: origem !== '*' });
