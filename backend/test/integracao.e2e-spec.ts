@@ -202,8 +202,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.destinos).toEqual([]);
     });
 
-    it('GET /api/viagens/:id responde 404 para quem nao participa', () =>
-      http().get(`/api/viagens/${viagemId}`).set(comToken(tokenEstranho)).expect(404));
+    it('GET /api/viagens/:id responde 404 para quem nao participa', async () => {
+      const { body } = await http()
+        .get(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenEstranho))
+        .expect(404);
+
+      // Mesma resposta de uma viagem inexistente: nao revela que ela existe.
+      expect(body.message).toBe(`Viagem ${viagemId} nao encontrada`);
+    });
 
     it('PATCH /api/viagens/:id edita nome e status', async () => {
       const { body } = await http()
@@ -482,13 +489,20 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(409));
 
     it('o VISUALIZADOR le a viagem mas nao edita', async () => {
-      await http().get(`/api/viagens/${viagemId}`).set(comToken(tokenColaborador)).expect(200);
+      const leitura = await http()
+        .get(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenColaborador))
+        .expect(200);
 
-      await http()
+      expect(leitura.body.id).toBe(viagemId);
+
+      const edicao = await http()
         .patch(`/api/viagens/${viagemId}`)
         .set(comToken(tokenColaborador))
         .send({ nome: 'Tentativa indevida' })
         .expect(403);
+
+      expect(edicao.body.message).toBe('Seu nivel de permissao nesta viagem e somente leitura');
     });
 
     it('GET .../membros lista os colaboradores', async () => {
@@ -514,12 +528,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
     });
 
-    it('PATCH .../membros/:membroId exige ser o criador', () =>
-      http()
+    it('PATCH .../membros/:membroId exige ser o criador', async () => {
+      const { body } = await http()
         .patch(`/api/viagens/${viagemId}/membros/${membroId}`)
         .set(comToken(tokenColaborador))
         .send({ permissao: 'VISUALIZADOR' })
-        .expect(403));
+        .expect(403);
+
+      expect(body.message).toBe('Apenas o criador da viagem pode executar esta acao');
+    });
 
     it('DELETE .../membros/sair recusa o criador com 400', () =>
       http()

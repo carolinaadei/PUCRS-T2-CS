@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
@@ -62,6 +63,22 @@ describe('AppModule (e2e)', () => {
       .post('/api/viagens')
       .send({ nome: 'Eurotrip 2027' })
       .expect(401);
+  });
+
+  it.each([
+    ['/api/usuarios/eu/paises-visitados', 'Paises visitados ainda nao implementados'],
+    ['/api/notificacoes', 'Notificacoes ainda nao implementadas'],
+  ])('GET %s ainda responde 501', async (rota, mensagem) => {
+    const usuario = { id: 1, nome: 'Ana Souza', email: 'ana.souza@example.com', versaoSessao: 0 };
+    prismaMock.usuario.findUnique.mockResolvedValueOnce(usuario);
+    const token = app.get(JwtService).sign({ sub: usuario.id, email: usuario.email, ver: 0 });
+
+    const resposta = await request(app.getHttpServer())
+      .get(rota)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(501);
+
+    expect(resposta.body.message).toBe(mensagem);
   });
 
   it('POST /api/auth/registrar rejeita payload invalido (400)', () => {
