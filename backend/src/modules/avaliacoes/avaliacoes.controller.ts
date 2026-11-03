@@ -49,7 +49,7 @@ export class AvaliacoesController {
   @Get('atividades/:atividadeId/avaliacoes')
   @ApiParamAtividade()
   @ApiOperation({
-    summary: 'RF23, RN01 - Listar reviews de uma atividade',
+    summary: 'Listar reviews de uma atividade',
     description: 'Publico. Mais recentes primeiro; lista vazia se nao houver.',
   })
   @ApiOkResponse({ type: [AvaliacaoDto] })
@@ -67,7 +67,7 @@ export class AvaliacoesController {
   @ApiAutenticado()
   @ApiParamAtividade()
   @ApiOperation({
-    summary: 'RF22, RN05 - Avaliar uma atividade (1 a 5 estrelas)',
+    summary: 'Avaliar uma atividade (1 a 5 estrelas)',
     description:
       'Uma avaliacao por usuario: avaliar de novo substitui a anterior. Recalcula a media.',
   })

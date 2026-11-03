@@ -172,7 +172,7 @@ export class AuthService {
       }),
     ]);
 
-    // Atalho de desenvolvimento: o nivel `debug` normalmente esta desligado em producao.
+    // Atalho de desenvolvimento: o main.ts desliga o nivel `debug` em producao.
     this.logger.debug(`Codigo de recuperacao para ${usuario.email}: ${codigo}`);
 
     try {

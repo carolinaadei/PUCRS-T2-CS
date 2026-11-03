@@ -82,7 +82,7 @@ const aplicar = (alvo: object, data: Dados) => {
  * formato delas. Cada chamada ao mock grava de forma sincrona, como uma linha
  * travada no banco: e isso que permite testar requisicoes simultaneas.
  */
-describe('AuthService - login e recuperacao de senha (RF02/RF03)', () => {
+describe('AuthService - login e recuperacao de senha', () => {
   let service: AuthService;
   let registros: RegistroRecuperacao[];
   let usuario: typeof USUARIO & { senhaHash: string; versaoSessao: number };
@@ -468,7 +468,7 @@ describe('AuthService', () => {
     service = modulo.get<AuthService>(AuthService);
   });
 
-  describe('RF02 - login', () => {
+  describe('login', () => {
     it('deve autenticar o usuario com credenciais validas e retornar token JWT e dados do usuario', async () => {
       prisma.usuario.findUnique.mockResolvedValue(usuarioMock);
 
@@ -518,7 +518,7 @@ describe('AuthService', () => {
     });
   });
 
-  describe('RF02 - logout', () => {
+  describe('logout', () => {
     it('deve incrementar a versao de sessao para invalidar os tokens ja emitidos', async () => {
       prisma.usuario.update.mockResolvedValue({ ...usuarioMock, versaoSessao: 1 });
 
@@ -534,7 +534,7 @@ describe('AuthService', () => {
     });
   });
 
-  describe('RF01 - registrar', () => {
+  describe('registrar', () => {
     it('deve registrar um novo usuario com sucesso', async () => {
       prisma.usuario.findUnique.mockResolvedValue(null);
       prisma.usuario.create.mockResolvedValue({

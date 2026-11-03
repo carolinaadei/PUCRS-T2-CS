@@ -99,7 +99,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Autenticacao e perfil (RF01, RF02)', () => {
+  describe('Autenticacao e perfil', () => {
     it('POST /api/auth/registrar cria as tres contas da jornada', async () => {
       const criador = await http()
         .post('/api/auth/registrar')
@@ -157,7 +157,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.nome).toBe('Ana Renomeada');
     });
 
-    it('GET /api/usuarios/eu/paises-visitados inicia vazio sem viagens concluidas (RF11)', async () => {
+    it('GET /api/usuarios/eu/paises-visitados inicia vazio sem viagens concluidas', async () => {
       const { body } = await http()
         .get('/api/usuarios/eu/paises-visitados')
         .set(comToken(tokenCriador))
@@ -167,7 +167,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Viagens (RF04 a RF07)', () => {
+  describe('Viagens', () => {
     it('POST /api/viagens cria a viagem e gera o codigo de convite', async () => {
       const { body } = await http()
         .post('/api/viagens')
@@ -208,8 +208,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(body.destinos).toEqual([]);
     });
 
-    it('GET /api/viagens/:id responde 404 para quem nao participa (RN06)', () =>
-      http().get(`/api/viagens/${viagemId}`).set(comToken(tokenEstranho)).expect(404));
+    it('GET /api/viagens/:id responde 404 para quem nao participa', async () => {
+      const { body } = await http()
+        .get(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenEstranho))
+        .expect(404);
+
+      // Mesma resposta de uma viagem inexistente: nao revela que ela existe.
+      expect(body.message).toBe(`Viagem ${viagemId} nao encontrada`);
+    });
 
     it('PATCH /api/viagens/:id edita nome e status', async () => {
       const { body } = await http()
@@ -241,8 +248,8 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Destinos (RF08 a RF10)', () => {
-    it('GET /api/destinos e publico para visitantes (RN01)', async () => {
+  describe('Destinos', () => {
+    it('GET /api/destinos e publico para visitantes', async () => {
       const { body } = await http().get('/api/destinos').expect(200);
       expect(body.total).toBe(0);
     });
@@ -323,7 +330,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Atividades (RF12 a RF14, RF23 a RF25)', () => {
+  describe('Atividades', () => {
     it('POST /api/atividades cadastra no catalogo', async () => {
       const { body } = await http()
         .post('/api/atividades')
@@ -478,7 +485,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Colaboracao (RF18 a RF20, RN02 a RN04)', () => {
+  describe('Colaboracao', () => {
     it('POST /api/viagens/:codigo/membros/entrar aceita o convite como VISUALIZADOR', async () => {
       const { body } = await http()
         .post(`/api/viagens/${viagemId}/membros/entrar`)
@@ -502,14 +509,21 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .set(comToken(tokenCriador))
         .expect(409));
 
-    it('o VISUALIZADOR le a viagem mas nao edita (RN02)', async () => {
-      await http().get(`/api/viagens/${viagemId}`).set(comToken(tokenColaborador)).expect(200);
+    it('o VISUALIZADOR le a viagem mas nao edita', async () => {
+      const leitura = await http()
+        .get(`/api/viagens/${viagemId}`)
+        .set(comToken(tokenColaborador))
+        .expect(200);
 
-      await http()
+      expect(leitura.body.id).toBe(viagemId);
+
+      const edicao = await http()
         .patch(`/api/viagens/${viagemId}`)
         .set(comToken(tokenColaborador))
         .send({ nome: 'Tentativa indevida' })
         .expect(403);
+
+      expect(edicao.body.message).toBe('Seu nivel de permissao nesta viagem e somente leitura');
     });
 
     it('GET .../membros lista os colaboradores', async () => {
@@ -535,12 +549,15 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(200);
     });
 
-    it('PATCH .../membros/:membroId exige ser o criador (RN04)', () =>
-      http()
+    it('PATCH .../membros/:membroId exige ser o criador', async () => {
+      const { body } = await http()
         .patch(`/api/viagens/${viagemId}/membros/${membroId}`)
         .set(comToken(tokenColaborador))
         .send({ permissao: 'VISUALIZADOR' })
-        .expect(403));
+        .expect(403);
+
+      expect(body.message).toBe('Apenas o criador da viagem pode executar esta acao');
+    });
 
     it('DELETE .../membros/sair recusa o criador com 400', () =>
       http()
@@ -549,7 +566,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
         .expect(400));
   });
 
-  describe('Avaliacoes (RF22, RF23, RN05)', () => {
+  describe('Avaliacoes', () => {
     it('POST /api/atividades/:id/avaliacoes cria a review e recalcula a media', async () => {
       const { body } = await http()
         .post(`/api/atividades/${atividadeCatalogoId}/avaliacoes`)
@@ -563,7 +580,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
       expect(Number(atividade.body.mediaAvaliacao)).toBe(4);
     });
 
-    it('avaliar de novo substitui a nota anterior (RN05)', async () => {
+    it('avaliar de novo substitui a nota anterior', async () => {
       await http()
         .post(`/api/atividades/${atividadeCatalogoId}/avaliacoes`)
         .set(comToken(tokenCriador))
@@ -612,7 +629,7 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
     });
   });
 
-  describe('Notificacoes (RF21)', () => {
+  describe('Notificacoes', () => {
     it('as tres rotas respondem 501, conforme o contrato publicado', async () => {
       await http().get('/api/notificacoes').set(comToken(tokenCriador)).expect(501);
       await http().patch('/api/notificacoes/lidas').set(comToken(tokenCriador)).expect(501);

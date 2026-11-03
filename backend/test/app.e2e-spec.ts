@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { criarPipeValidacao } from '../src/common/pipes/pipe-validacao';
@@ -49,19 +50,32 @@ describe('AppModule (e2e)', () => {
     return request(app.getHttpServer()).get('/api/health').expect(200);
   });
 
-  it('GET /api/destinos e publico para visitantes (RN01)', () => {
+  it('GET /api/destinos e publico para visitantes', () => {
     return request(app.getHttpServer()).get('/api/destinos').expect(200);
   });
 
-  it('GET /api/viagens exige autenticacao (RNF03)', () => {
+  it('GET /api/viagens exige autenticacao', () => {
     return request(app.getHttpServer()).get('/api/viagens').expect(401);
   });
 
-  it('POST /api/viagens exige autenticacao: visitante nao cria viagem (RN01)', () => {
+  it('POST /api/viagens exige autenticacao: visitante nao cria viagem', () => {
     return request(app.getHttpServer())
       .post('/api/viagens')
       .send({ nome: 'Eurotrip 2027' })
       .expect(401);
+  });
+
+  it('GET /api/notificacoes ainda responde 501', async () => {
+    const usuario = { id: 1, nome: 'Ana Souza', email: 'ana.souza@example.com', versaoSessao: 0 };
+    prismaMock.usuario.findUnique.mockResolvedValueOnce(usuario);
+    const token = app.get(JwtService).sign({ sub: usuario.id, email: usuario.email, ver: 0 });
+
+    const resposta = await request(app.getHttpServer())
+      .get('/api/notificacoes')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(501);
+
+    expect(resposta.body.message).toBe('Notificacoes ainda nao implementadas');
   });
 
   it('POST /api/auth/registrar rejeita payload invalido (400)', () => {
@@ -71,7 +85,7 @@ describe('AppModule (e2e)', () => {
       .expect(400);
   });
 
-  describe('POST /api/auth/registrar - cadastro (RF01)', () => {
+  describe('POST /api/auth/registrar - cadastro', () => {
     const payload = {
       nome: 'Ana Souza',
       email: 'ana.souza@example.com',

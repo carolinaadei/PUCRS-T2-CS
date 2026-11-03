@@ -13,7 +13,10 @@ export class AutorAvaliacaoDto extends PickType(UsuarioResumoDto, ['id', 'nome']
  */
 export class AvaliacaoDto {
   /** Identificador unico da avaliacao (usado no endpoint DELETE /avaliacoes/:avaliacaoId). */
-  @ApiProperty({ example: 1, description: 'Id da avaliacao' })
+  @ApiProperty({
+    example: 1,
+    description: 'Id da avaliacao, usado em DELETE /avaliacoes/{avaliacaoId}',
+  })
   id!: number;
 
   /** Identificador do usuario autor da avaliacao. */

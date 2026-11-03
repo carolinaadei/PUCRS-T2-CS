@@ -41,7 +41,7 @@ export class AuthController {
   @Publico()
   @Post('registrar')
   @ApiOperation({
-    summary: 'RF01 - Cadastrar conta',
+    summary: 'Cadastrar conta',
     description: 'Cria a conta e ja devolve o token de acesso.',
   })
   @ApiCreatedResponse({ type: RespostaAutenticacaoDto })
@@ -59,7 +59,7 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'RF02 - Autenticar usuario',
+    summary: 'Autenticar usuario',
     description: 'Devolve o JWT a enviar no header `Authorization: Bearer <token>`.',
   })
   @ApiOkResponse({ type: RespostaAutenticacaoDto })
@@ -77,7 +77,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiAutenticado()
   @ApiOperation({
-    summary: 'RF02 - Encerrar sessoes',
+    summary: 'Encerrar sessoes',
     description:
       'Invalida todos os JWTs ja emitidos para o usuario: os tokens anteriores ' +
       'passam a receber 401, inclusive em outros dispositivos.',
@@ -95,7 +95,7 @@ export class AuthController {
   @Post('recuperar-senha')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'RF03 (1/3) - Enviar codigo de 6 digitos por e-mail',
+    summary: 'Recuperar senha (1/3) - Enviar codigo de 6 digitos por e-mail',
     description:
       'Resposta sempre igual, exista a conta ou nao. Codigo valido por 15 min. ' +
       'Limite: 3 pedidos a cada 15 min por IP.',
@@ -117,7 +117,7 @@ export class AuthController {
   @Post('verificar-codigo')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'RF03 (2/3) - Conferir o codigo e liberar a troca',
+    summary: 'Recuperar senha (2/3) - Conferir o codigo e liberar a troca',
     description:
       'Devolve o `tokenTroca`, valido por 10 min. Cada codigo aceita 5 tentativas. ' +
       'Limite: 10 pedidos a cada 15 min por IP.',
@@ -134,7 +134,7 @@ export class AuthController {
   @Post('redefinir-senha')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'RF03 (3/3) - Gravar a nova senha',
+    summary: 'Recuperar senha (3/3) - Gravar a nova senha',
     description:
       'Troca a senha e encerra as sessoes abertas: JWTs emitidos antes passam a ' +
       'receber 401. Limite: 5 pedidos a cada 15 min por IP.',

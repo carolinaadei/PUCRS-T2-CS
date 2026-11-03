@@ -29,14 +29,14 @@ export class UsuariosController {
     description: 'Por enquanto, apenas o nome pode ser alterado.',
   })
   @ApiOkResponse({ type: PerfilDto })
-  @ApiErroValidacao('nome must be longer than or equal to 2 characters')
+  @ApiErroValidacao('O nome deve ter no minimo 2 caracteres')
   atualizar(@UsuarioAtual() usuario: UsuarioAutenticado, @Body() dto: AtualizarPerfilDto) {
     return this.usuariosService.atualizarPerfil(usuario.id, dto);
   }
 
   @Get('eu/paises-visitados')
   @ApiOperation({
-    summary: 'RF11 - Paises visitados',
+    summary: 'Paises visitados',
     description:
       'Paises dos destinos das viagens concluidas do usuario, para o mapa (jsVectormap).',
   })
