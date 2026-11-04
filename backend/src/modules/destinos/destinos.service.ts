@@ -4,7 +4,7 @@ import { RespostaPaginada } from '../../common/dto/paginacao.dto';
 import { CodigoErro } from '../../common/erros/codigos-erro';
 import { conflito, naoEncontrado, proibido, requisicaoInvalida } from '../../common/erros/erros';
 import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
-import { deDia, paraDia } from '../../common/utils/formatos';
+import { dataDoCorpo, paraDia } from '../../common/utils/formatos';
 import { PrismaService } from '../../prisma/prisma.service';
 import { travarViagem } from '../../prisma/travas';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
@@ -35,10 +35,6 @@ interface MediaDeDestino {
   media: number;
   total: number;
 }
-
-/** Converte o que veio no corpo: omitido mantem, null apaga, string vira data. */
-const dataDoCorpo = (valor: string | null | undefined, atual: Date | null, campo: string) =>
-  valor === undefined ? atual : valor === null ? null : deDia(valor, campo);
 
 @Injectable()
 export class DestinosService {

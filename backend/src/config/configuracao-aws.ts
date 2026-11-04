@@ -4,23 +4,14 @@ import { Logger } from '@nestjs/common';
 
 type Ambiente = Record<string, string | undefined>;
 
-const TENTATIVAS = 5;
-
-const esperar = (ms: number) => new Promise((resolver) => setTimeout(resolver, ms));
-
-/** O provisionamento pode terminar instantes antes de a API subir; tenta de novo antes de desistir. */
-async function comRetentativas<T>(descricao: string, operacao: () => Promise<T>): Promise<T> {
-  for (let tentativa = 1; ; tentativa++) {
-    try {
-      return await operacao();
-    } catch (erro) {
-      if (tentativa >= TENTATIVAS) {
-        throw new Error(`Nao foi possivel ler ${descricao}: ${String(erro)}`);
-      }
-      await esperar(500 * 2 ** (tentativa - 1));
-    }
-  }
-}
+/**
+ * Falhas transitorias o SDK ja repete sozinho (3 tentativas com espera). O que
+ * chega aqui e definitivo, e o boot para dizendo o que nao foi lido.
+ */
+const lerOuFalhar = <T>(descricao: string, leitura: Promise<T>): Promise<T> =>
+  leitura.catch((erro: unknown) => {
+    throw new Error(`Nao foi possivel ler ${descricao}: ${String(erro)}`);
+  });
 
 /** So preenche o que nao veio do ambiente: variavel definida explicitamente sempre vence. */
 function aplicar(ambiente: Ambiente, valores: Record<string, unknown>): string[] {
@@ -97,7 +88,8 @@ export async function carregarConfiguracaoDaAws(
     const cliente = new SecretsManagerClient(opcoes);
 
     for (const id of segredos) {
-      const { SecretString } = await comRetentativas(`o segredo ${id}`, () =>
+      const { SecretString } = await lerOuFalhar(
+        `o segredo ${id}`,
         cliente.send(new GetSecretValueCommand({ SecretId: id })),
       );
 
@@ -109,7 +101,8 @@ export async function carregarConfiguracaoDaAws(
 
   if (caminhoParametros) {
     const cliente = new SSMClient(opcoes);
-    const valores = await comRetentativas(`os parametros em ${caminhoParametros}`, () =>
+    const valores = await lerOuFalhar(
+      `os parametros em ${caminhoParametros}`,
       lerParametros(cliente, caminhoParametros),
     );
 

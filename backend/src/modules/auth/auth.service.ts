@@ -55,10 +55,8 @@ export class AuthService {
   /** Cria a conta com a senha armazenada em hash e ja abre uma sessao. */
   async registrar(dto: RegistrarDto): Promise<RespostaAutenticacaoDto> {
     const email = dto.email.trim().toLowerCase();
-    const jaCadastrado = conflito(
-      CodigoErro.EMAIL_JA_CADASTRADO,
-      'Ja existe uma conta com este e-mail',
-    );
+    const jaCadastrado = () =>
+      conflito(CodigoErro.EMAIL_JA_CADASTRADO, 'Ja existe uma conta com este e-mail');
 
     const existente = await this.prisma.usuario.findUnique({
       where: { email },
@@ -66,7 +64,7 @@ export class AuthService {
     });
 
     if (existente) {
-      throw jaCadastrado;
+      throw jaCadastrado();
     }
 
     const senhaHash = await this.gerarHash(dto.senha);
@@ -82,7 +80,7 @@ export class AuthService {
       // A checagem acima resolve o caso comum; o indice unico resolve a corrida
       // entre dois cadastros simultaneos com o mesmo e-mail.
       if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-        throw jaCadastrado;
+        throw jaCadastrado();
       }
 
       throw erro;
@@ -97,20 +95,18 @@ export class AuthService {
     });
 
     // Mensagem generica de proposito: nao revela se o e-mail existe.
-    const credenciaisInvalidas = naoAutenticado(
-      CodigoErro.CREDENCIAIS_INVALIDAS,
-      'E-mail ou senha invalidos',
-    );
+    const credenciaisInvalidas = () =>
+      naoAutenticado(CodigoErro.CREDENCIAIS_INVALIDAS, 'E-mail ou senha invalidos');
 
     if (!usuario) {
       // Roda o bcrypt mesmo assim: sem ele, o e-mail desconhecido responderia
       // dezenas de ms mais rapido, e o tempo entregaria quem tem conta.
       await bcrypt.compare(dto.senha, await this.obterHashDescartavel());
-      throw credenciaisInvalidas;
+      throw credenciaisInvalidas();
     }
 
     if (!(await bcrypt.compare(dto.senha, usuario.senhaHash))) {
-      throw credenciaisInvalidas;
+      throw credenciaisInvalidas();
     }
 
     return this.abrirSessao(usuario);
@@ -124,10 +120,11 @@ export class AuthService {
    * copia - roubada ou vazada -, e todas as sessoes do usuario sao encerradas.
    */
   async renovar(refreshToken: string): Promise<RespostaAutenticacaoDto> {
-    const invalido = naoAutenticado(
-      CodigoErro.REFRESH_TOKEN_INVALIDO,
-      'Sessao invalida ou expirada; faca login novamente',
-    );
+    const invalido = () =>
+      naoAutenticado(
+        CodigoErro.REFRESH_TOKEN_INVALIDO,
+        'Sessao invalida ou expirada; faca login novamente',
+      );
 
     const sessao = await this.prisma.sessaoRefresh.findUnique({
       where: { tokenHash: sha256(refreshToken) },
@@ -140,17 +137,17 @@ export class AuthService {
     });
 
     if (!sessao) {
-      throw invalido;
+      throw invalido();
     }
 
     if (sessao.revogadaEm) {
       this.logger.warn(`Refresh token reutilizado pelo usuario ${sessao.usuario.id}`);
       await this.encerrarTodasAsSessoes(sessao.usuario.id);
-      throw invalido;
+      throw invalido();
     }
 
     if (sessao.expiraEm <= new Date()) {
-      throw invalido;
+      throw invalido();
     }
 
     // Condicional: entre duas renovacoes simultaneas com o mesmo token, so uma
@@ -161,7 +158,7 @@ export class AuthService {
     });
 
     if (count === 0) {
-      throw invalido;
+      throw invalido();
     }
 
     return this.abrirSessao(sessao.usuario);
@@ -296,10 +293,8 @@ export class AuthService {
   async verificarCodigo(email: string, codigo: string): Promise<RespostaVerificacaoDto> {
     // Mensagem unica para e-mail desconhecido, codigo errado, expirado ou queimado:
     // responder diferente entregaria quais e-mails existem.
-    const codigoInvalido = requisicaoInvalida(
-      CodigoErro.CODIGO_RECUPERACAO_INVALIDO,
-      'Codigo invalido ou expirado',
-    );
+    const codigoInvalido = () =>
+      requisicaoInvalida(CodigoErro.CODIGO_RECUPERACAO_INVALIDO, 'Codigo invalido ou expirado');
 
     const usuario = await this.prisma.usuario.findUnique({
       where: { email: email.trim().toLowerCase() },
@@ -307,7 +302,7 @@ export class AuthService {
     });
 
     if (!usuario) {
-      throw codigoInvalido;
+      throw codigoInvalido();
     }
 
     const registro = await this.prisma.tokenRecuperacaoSenha.findFirst({
@@ -316,7 +311,7 @@ export class AuthService {
     });
 
     if (!registro || registro.expiraEm < new Date()) {
-      throw codigoInvalido;
+      throw codigoInvalido();
     }
 
     // Reserva a tentativa ANTES de conferir o codigo, num UPDATE condicional: o
@@ -333,7 +328,7 @@ export class AuthService {
     });
 
     if (reserva.count === 0) {
-      throw codigoInvalido;
+      throw codigoInvalido();
     }
 
     if (!this.codigoConfere(codigo, registro.codigoHash)) {
@@ -348,7 +343,7 @@ export class AuthService {
         data: { usadoEm: new Date() },
       });
 
-      throw codigoInvalido;
+      throw codigoInvalido();
     }
 
     const tokenTroca = randomBytes(32).toString('base64url');
@@ -360,7 +355,7 @@ export class AuthService {
     });
 
     if (emitido.count === 0) {
-      throw codigoInvalido;
+      throw codigoInvalido();
     }
 
     return { tokenTroca, expiraEm: trocaExpiraEm.toISOString() };
@@ -374,10 +369,11 @@ export class AuthService {
   ): Promise<void> {
     this.conferirConfirmacao(novaSenha, confirmarNovaSenha);
 
-    const sessaoInvalida = requisicaoInvalida(
-      CodigoErro.TOKEN_TROCA_INVALIDO,
-      'Sessao de redefinicao invalida ou expirada',
-    );
+    const sessaoInvalida = () =>
+      requisicaoInvalida(
+        CodigoErro.TOKEN_TROCA_INVALIDO,
+        'Sessao de redefinicao invalida ou expirada',
+      );
 
     const registro = await this.prisma.tokenRecuperacaoSenha.findUnique({
       where: { trocaHash: sha256(tokenTroca) },
@@ -392,7 +388,7 @@ export class AuthService {
       !registro.trocaExpiraEm ||
       registro.trocaExpiraEm < new Date()
     ) {
-      throw sessaoInvalida;
+      throw sessaoInvalida();
     }
 
     const senhaHash = await this.gerarHash(novaSenha);
@@ -404,7 +400,7 @@ export class AuthService {
       });
 
       if (consumido.count === 0) {
-        throw sessaoInvalida;
+        throw sessaoInvalida();
       }
 
       // Quem estava com um token roubado perde o acesso junto com a senha antiga.

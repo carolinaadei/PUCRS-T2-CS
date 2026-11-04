@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, TransformFnParams } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { ApararOuNulo } from '../../../common/validacao/texto';
 
 /** Nota de 1 a 5 estrelas e comentario opcional. */
 export class SalvarAvaliacaoDto {
@@ -16,9 +16,7 @@ export class SalvarAvaliacaoDto {
     example: 'Vale a pena chegar cedo para evitar a fila.',
     maxLength: 2000,
   })
-  @Transform(({ value }: TransformFnParams): unknown =>
-    typeof value === 'string' ? value.trim() || null : value,
-  )
+  @ApararOuNulo()
   @IsString({ message: 'O comentario deve ser um texto' })
   @MaxLength(2000, { message: 'O comentario deve ter no maximo 2000 caracteres' })
   @IsOptional()

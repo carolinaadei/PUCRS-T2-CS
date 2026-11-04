@@ -154,6 +154,11 @@ docker compose down -v
 
 Medidos na versão 1.5.37 — valem para desenvolvimento, não para validar segurança:
 
+- **O estado só é gravado num desligamento com folga.** O MiniStack grava a pilha,
+  as filas e os segredos ao receber o SIGTERM, depois que as requisições em curso
+  terminam — inclusive o *long polling* do worker, de até 10 s. Se o Docker o matar
+  antes (o padrão pode ser de 1 s, como no Docker Desktop), um `restart` apaga tudo.
+  Por isso o compose fixa `stop_grace_period: 30s` no MiniStack — não remova.
 - **Autorização não é conferida por padrão.** O S3 do MiniStack aceita upload sem
   assinatura; a política do *presigned POST* (tamanho e tipo) é aplicada, mas
   permissões IAM e bucket policies só são testáveis na AWS (ou com `AUTH=true`).

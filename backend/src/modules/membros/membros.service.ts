@@ -3,16 +3,13 @@ import { PermissaoMembro, Prisma, TipoNotificacao } from '@prisma/client';
 import { CodigoErro } from '../../common/erros/codigos-erro';
 import { conflito, naoEncontrado, requisicaoInvalida } from '../../common/erros/erros';
 import { ContextoViagem, UsuarioAutenticado } from '../../common/types/usuario-autenticado';
-import { gerarCodigo, normalizarCodigo } from '../../common/utils/codigo';
+import { comCodigoUnico, gerarCodigo, normalizarCodigo } from '../../common/utils/codigo';
 import { paraDia } from '../../common/utils/formatos';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { CodigoConviteDto, ConviteDto } from './dto/convite.dto';
 import { MembroDto } from './dto/membro-resposta.dto';
 import { INCLUIR_USUARIO, paraMembroDto } from './membros.mapper';
-
-/** Colisao de codigo e improvavel, mas nao impossivel: tenta outros antes de desistir. */
-const TENTATIVAS_DE_CODIGO = 5;
 
 type Tx = Prisma.TransactionClient;
 
@@ -41,14 +38,14 @@ export class MembrosService {
 
   /** Entra na viagem pelo codigo de convite. Quem entra comeca como VISUALIZADOR. */
   async aceitarConvite(codigo: string, usuario: UsuarioAutenticado): Promise<MembroDto> {
-    const jaParticipa = conflito(CodigoErro.JA_PARTICIPA, 'Voce ja participa desta viagem');
+    const jaParticipa = () => conflito(CodigoErro.JA_PARTICIPA, 'Voce ja participa desta viagem');
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         const viagem = await this.viagemDoConvite(tx, codigo);
 
         if (viagem.criadoPor === usuario.id) {
-          throw jaParticipa;
+          throw jaParticipa();
         }
 
         const membro = await tx.membroViagem.create({
@@ -72,7 +69,7 @@ export class MembrosService {
     } catch (erro) {
       // Indice unico (viagem, usuario): ja era membro, ou dois aceites simultaneos.
       if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-        throw jaParticipa;
+        throw jaParticipa();
       }
 
       throw erro;
@@ -81,24 +78,13 @@ export class MembrosService {
 
   /** Troca o codigo de convite: o anterior deixa de valer na hora. */
   async gerarNovoConvite(viagemId: string): Promise<CodigoConviteDto> {
-    for (let tentativa = 1; ; tentativa++) {
-      try {
-        const viagem = await this.prisma.viagem.update({
-          where: { id: viagemId },
-          data: { codigoConvite: gerarCodigo() },
-          select: { codigoConvite: true },
-        });
-
-        return { codigoConvite: viagem.codigoConvite };
-      } catch (erro) {
-        const colidiu =
-          erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002';
-
-        if (!colidiu || tentativa >= TENTATIVAS_DE_CODIGO) {
-          throw erro;
-        }
-      }
-    }
+    return comCodigoUnico(() =>
+      this.prisma.viagem.update({
+        where: { id: viagemId },
+        data: { codigoConvite: gerarCodigo() },
+        select: { codigoConvite: true },
+      }),
+    );
   }
 
   // ----------------------------- Membros ------------------------------

@@ -21,10 +21,9 @@ describe('ArmazenamentoService', () => {
     process.env = credenciais;
   });
 
-  it('sem bucket configurado fica indisponivel e responde UPLOAD_INDISPONIVEL', async () => {
+  it('sem bucket configurado responde UPLOAD_INDISPONIVEL', async () => {
     const servico = new ArmazenamentoService(config({}));
 
-    expect(servico.disponivel).toBe(false);
     await expect(servico.autorizarUpload('destinos', 'image/jpeg')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
@@ -83,35 +82,44 @@ describe('FilaEmailsService', () => {
     expect(new FilaEmailsService(config({})).ativa).toBe(false);
   });
 
-  it('resolve a URL pelo nome uma unica vez e publica o e-mail como JSON', async () => {
-    enviar.mockResolvedValueOnce({ QueueUrl: 'http://ministack:4566/000/emails' } as never);
+  it('publica o e-mail como JSON na URL configurada, pelo endpoint do MiniStack', async () => {
     enviar.mockResolvedValue({} as never);
+    const url = 'http://localhost:4566/000000000000/emails';
     const fila = new FilaEmailsService(
-      config({ filaEmails: 'emails', endpoint: 'http://ministack:4566' }),
+      config({ filaEmails: url, endpoint: 'http://ministack:4566' }),
     );
 
     await fila.publicar(mensagem);
-    await fila.publicar(mensagem);
 
-    const comandos = enviar.mock.calls.map(([comando]) => comando.constructor.name);
-    expect(comandos).toEqual(['GetQueueUrlCommand', 'SendMessageCommand', 'SendMessageCommand']);
-    expect(JSON.parse(enviar.mock.calls[1][0].input.MessageBody)).toEqual(mensagem);
+    const [comando] = enviar.mock.calls[0] as [
+      { input: { QueueUrl: string; MessageBody: string } },
+    ];
+    expect(comando.input.QueueUrl).toBe(url);
+    expect(JSON.parse(comando.input.MessageBody)).toEqual(mensagem);
   });
 
-  it('recebe com long polling, le a tentativa e confirma pelo recibo', async () => {
+  it('recebe com long polling, le cada mensagem e confirma pelo recibo', async () => {
     enviar.mockResolvedValueOnce({
       Messages: [
         {
+          MessageId: 'm1',
           ReceiptHandle: 'r1',
           Body: JSON.stringify(mensagem),
           Attributes: { ApproximateReceiveCount: '2' },
         },
+        { MessageId: 'm2', ReceiptHandle: 'r2', Body: 'nao-e-json' },
+        { MessageId: 'm3', ReceiptHandle: 'r3', Body: '{}' },
       ],
     } as never);
     enviar.mockResolvedValue({} as never);
     const fila = new FilaEmailsService(config({ filaEmails: 'http://fila/emails' }));
 
-    await expect(fila.receber(1)).resolves.toEqual([{ recibo: 'r1', tentativa: 2, mensagem }]);
+    // Uma mensagem fora do formato nao derruba o lote: so ela vem sem e-mail.
+    await expect(fila.receber(1)).resolves.toEqual([
+      { id: 'm1', recibo: 'r1', tentativa: 2, mensagem },
+      { id: 'm2', recibo: 'r2', tentativa: 1, mensagem: null },
+      { id: 'm3', recibo: 'r3', tentativa: 1, mensagem: null },
+    ]);
     await fila.confirmar('r1');
 
     expect(enviar.mock.calls[0][0].input).toMatchObject({
@@ -122,15 +130,5 @@ describe('FilaEmailsService', () => {
       QueueUrl: 'http://fila/emails',
       ReceiptHandle: 'r1',
     });
-  });
-
-  it('nao guarda a falha ao resolver a URL: a proxima chamada tenta de novo', async () => {
-    enviar.mockRejectedValueOnce(new Error('fora do ar'));
-    enviar.mockResolvedValueOnce({ QueueUrl: 'http://fila/emails' } as never);
-    enviar.mockResolvedValue({} as never);
-    const fila = new FilaEmailsService(config({ filaEmails: 'emails' }));
-
-    await expect(fila.publicar(mensagem)).rejects.toThrow('fora do ar');
-    await expect(fila.publicar(mensagem)).resolves.toBeUndefined();
   });
 });

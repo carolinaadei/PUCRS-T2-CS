@@ -1,24 +1,16 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { StatusViagem } from '@prisma/client';
-import { Transform, TransformFnParams } from 'class-transformer';
 import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { FORMATO_DIA } from '../../../common/utils/formatos';
 import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
-
-const aparar = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() : value;
-
-/** Descricao em branco equivale a nenhuma descricao. */
-const apararOuNulo = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() || null : value;
+import { Aparar, ApararOuNulo } from '../../../common/validacao/texto';
 
 const MENSAGEM_STATUS = `Status invalido: use ${Object.values(StatusViagem).join(', ')}`;
 
 /** Criar viagem com nome, descricao e datas gerais. Datas no formato aaaa-mm-dd. */
 export class CriarViagemDto {
   @ApiProperty({ example: 'Eurotrip 2027' })
-  // Aparado antes de validar, para que um nome so de espacos conte como em branco.
-  @Transform(aparar)
+  @Aparar()
   @IsString({ message: 'O nome deve ser um texto' })
   @IsNotEmpty({ message: 'O nome da viagem nao pode ficar em branco' })
   @MaxLength(120, { message: 'O nome deve ter no maximo 120 caracteres' })
@@ -29,7 +21,7 @@ export class CriarViagemDto {
     nullable: true,
     example: 'Roteiro de 15 dias por Portugal, Espanha e Franca',
   })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'A descricao deve ser um texto' })
   @MaxLength(5000, { message: 'A descricao deve ter no maximo 5000 caracteres' })
   @IsOptional()
@@ -70,7 +62,7 @@ export class AtualizarViagemDto extends PartialType(
   OmitType(CriarViagemDto, ['nome', 'status'] as const),
 ) {
   @ApiPropertyOptional({ example: 'Eurotrip 2027' })
-  @Transform(aparar)
+  @Aparar()
   @OpcionalNaoNulo()
   @IsString({ message: 'O nome deve ser um texto' })
   @IsNotEmpty({ message: 'O nome da viagem nao pode ficar em branco' })

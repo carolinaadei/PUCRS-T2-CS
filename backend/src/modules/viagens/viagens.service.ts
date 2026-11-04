@@ -4,8 +4,8 @@ import { RespostaPaginada } from '../../common/dto/paginacao.dto';
 import { CodigoErro } from '../../common/erros/codigos-erro';
 import { requisicaoInvalida } from '../../common/erros/erros';
 import { PapelNaViagem, UsuarioAutenticado } from '../../common/types/usuario-autenticado';
-import { gerarCodigo } from '../../common/utils/codigo';
-import { deDia } from '../../common/utils/formatos';
+import { comCodigoUnico, gerarCodigo } from '../../common/utils/codigo';
+import { dataDoCorpo } from '../../common/utils/formatos';
 import { PrismaService } from '../../prisma/prisma.service';
 import { travarViagem } from '../../prisma/travas';
 import { paraDestinoViagemDto } from '../destinos/destinos.mapper';
@@ -16,13 +16,6 @@ import { BuscarViagensDto } from './dto/buscar-viagens.dto';
 import { AtualizarViagemDto, CriarViagemDto } from './dto/criar-viagem.dto';
 import { ViagemDetalheDto, ViagemDto, ViagemResumoDto } from './dto/viagem-resposta.dto';
 import { paraViagemDto } from './viagens.mapper';
-
-/** Colisao de codigo e improvavel, mas nao impossivel: tenta outros antes de desistir. */
-const TENTATIVAS_DE_CODIGO = 5;
-
-/** Converte o que veio no corpo: omitido mantem, null apaga, string vira data. */
-const dataDoCorpo = (valor: string | null | undefined, atual: Date | null, campo: string) =>
-  valor === undefined ? atual : valor === null ? null : deDia(valor, campo);
 
 @Injectable()
 export class ViagensService {
@@ -37,31 +30,22 @@ export class ViagensService {
     const dataFim = dataDoCorpo(dto.dataFim, null, 'fim');
     this.validarPeriodo(dataInicio, dataFim);
 
-    for (let tentativa = 1; ; tentativa++) {
-      try {
-        const viagem = await this.prisma.viagem.create({
-          data: {
-            id: gerarCodigo(),
-            codigoConvite: gerarCodigo(),
-            nome: dto.nome,
-            descricao: dto.descricao ?? null,
-            dataInicio,
-            dataFim,
-            status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,
-            criadoPor: usuarioId,
-          },
-        });
+    const viagem = await comCodigoUnico(() =>
+      this.prisma.viagem.create({
+        data: {
+          id: gerarCodigo(),
+          codigoConvite: gerarCodigo(),
+          nome: dto.nome,
+          descricao: dto.descricao ?? null,
+          dataInicio,
+          dataFim,
+          status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,
+          criadoPor: usuarioId,
+        },
+      }),
+    );
 
-        return paraViagemDto(viagem, 'CRIADOR');
-      } catch (erro) {
-        const colidiu =
-          erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002';
-
-        if (!colidiu || tentativa >= TENTATIVAS_DE_CODIGO) {
-          throw erro;
-        }
-      }
-    }
+    return paraViagemDto(viagem, 'CRIADOR');
   }
 
   /** Painel pessoal: viagens criadas pelo usuario e aquelas em que colabora. */

@@ -9,6 +9,7 @@ export const CodigoErro = {
   VALIDACAO: 'VALIDACAO',
   ID_INVALIDO: 'ID_INVALIDO',
   JSON_INVALIDO: 'JSON_INVALIDO',
+  CORPO_INVALIDO: 'CORPO_INVALIDO',
   NAO_AUTENTICADO: 'NAO_AUTENTICADO',
   SESSAO_ENCERRADA: 'SESSAO_ENCERRADA',
   PROIBIDO: 'PROIBIDO',
@@ -71,6 +72,8 @@ export const DESCRICAO_CODIGO_ERRO: Record<CodigoErro, string> = {
   VALIDACAO: 'Corpo, query ou parametro fora do formato. `detalhes` lista os campos.',
   ID_INVALIDO: 'Parametro de rota que deveria ser um id inteiro positivo.',
   JSON_INVALIDO: 'O corpo enviado nao e um JSON valido.',
+  CORPO_INVALIDO:
+    'Corpo ilegivel: charset ou compressao nao suportados, ou envio interrompido (400/415).',
   NAO_AUTENTICADO: 'Token de acesso ausente, invalido ou expirado.',
   SESSAO_ENCERRADA: 'O token foi revogado (logout, troca ou redefinicao de senha).',
   PROIBIDO: 'Autenticado, mas sem permissao para a operacao.',

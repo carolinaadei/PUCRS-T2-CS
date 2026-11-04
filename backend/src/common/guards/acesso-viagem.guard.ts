@@ -54,20 +54,14 @@ export class AcessoViagemGuard implements CanActivate {
     });
 
     // Quem nao participa recebe 404, e nao 403: nao revelamos que a viagem existe.
-    const naoEncontrada = naoEncontrado(CodigoErro.VIAGEM_NAO_ENCONTRADA, 'Viagem nao encontrada');
+    const ehCriador = viagem?.criadoPor === usuario.id;
+    const vinculo = viagem?.membros[0];
 
-    if (!viagem) {
-      throw naoEncontrada;
+    if (!viagem || (!ehCriador && !vinculo)) {
+      throw naoEncontrado(CodigoErro.VIAGEM_NAO_ENCONTRADA, 'Viagem nao encontrada');
     }
 
-    const ehCriador = viagem.criadoPor === usuario.id;
-    const vinculo = viagem.membros[0];
-
-    if (!ehCriador && !vinculo) {
-      throw naoEncontrada;
-    }
-
-    const papel: PapelNaViagem = ehCriador ? 'CRIADOR' : vinculo.permissao;
+    const papel: PapelNaViagem = ehCriador ? 'CRIADOR' : vinculo!.permissao;
 
     if (nivelExigido === NivelAcessoViagem.CRIADOR && papel !== 'CRIADOR') {
       throw proibido(
@@ -83,7 +77,7 @@ export class AcessoViagemGuard implements CanActivate {
       );
     }
 
-    requisicao.viagemContexto = { viagemId: viagem.id, criadoPor: viagem.criadoPor, papel };
+    requisicao.viagemContexto = { viagemId: viagem.id, papel };
 
     return true;
   }

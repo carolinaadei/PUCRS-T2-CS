@@ -49,7 +49,7 @@ na raiz (e `COMPOSE_PROJECT_NAME` para isolar cópias do repositório).
 cd backend
 npm install
 cp .env.example .env          # Windows: copy .env.example .env
-npm run db:up                 # so o Postgres do compose
+npm run db:up                 # so o Postgres do compose, com as portas do backend/.env
 npm run prisma:migrate        # cria as tabelas
 npm run prisma:seed           # (opcional) dados de demonstracao
 npm run start:dev

@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { TipoAtividade } from '@prisma/client';
-import { Transform, TransformFnParams } from 'class-transformer';
 import {
   IsEnum,
   IsLatitude,
@@ -12,20 +11,14 @@ import {
   MaxLength,
 } from 'class-validator';
 import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
-
-const aparar = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() : value;
-
-/** Texto opcional: em branco vira null. */
-const apararOuNulo = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() || null : value;
+import { Aparar, ApararOuNulo } from '../../../common/validacao/texto';
 
 const MENSAGEM_TIPO = `Tipo de atividade invalido: use ${Object.values(TipoAtividade).join(', ')}`;
 
 /** Atividade ou local do catalogo global, reaproveitavel entre viagens. */
 export class CriarCatalogoAtividadeDto {
   @ApiProperty({ example: 'Torre de Belem' })
-  @Transform(aparar)
+  @Aparar()
   @IsString({ message: 'O nome da atividade deve ser um texto' })
   @IsNotEmpty({ message: 'O nome da atividade nao pode ficar em branco' })
   @MaxLength(180, { message: 'O nome da atividade deve ter no maximo 180 caracteres' })
@@ -36,7 +29,7 @@ export class CriarCatalogoAtividadeDto {
     nullable: true,
     example: 'Fortaleza do seculo XVI na margem do Tejo',
   })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'A descricao deve ser um texto' })
   @MaxLength(2000, { message: 'A descricao deve ter no maximo 2000 caracteres' })
   @IsOptional()
@@ -47,21 +40,21 @@ export class CriarCatalogoAtividadeDto {
   tipoAtividade!: TipoAtividade;
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Av. Brasilia' })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'O local deve ser um texto' })
   @MaxLength(255, { message: 'O local deve ter no maximo 255 caracteres' })
   @IsOptional()
   local?: string | null;
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Lisboa' })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'A cidade deve ser um texto' })
   @MaxLength(120, { message: 'A cidade deve ter no maximo 120 caracteres' })
   @IsOptional()
   cidade?: string | null;
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Portugal' })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'O pais deve ser um texto' })
   @MaxLength(80, { message: 'O pais deve ter no maximo 80 caracteres' })
   @IsOptional()
@@ -83,7 +76,7 @@ export class CriarCatalogoAtividadeDto {
     description: 'Identificador do local na Google Places API (unico no catalogo)',
     example: 'ChIJ1Ww5Hc80GQ0RXkYcB6Ew3xE',
   })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'O googlePlaceId deve ser um texto' })
   @MaxLength(255, { message: 'O googlePlaceId deve ter no maximo 255 caracteres' })
   @IsOptional()
@@ -109,7 +102,7 @@ export class AtualizarCatalogoAtividadeDto extends PartialType(
   OmitType(CriarCatalogoAtividadeDto, ['nome', 'tipoAtividade'] as const),
 ) {
   @ApiPropertyOptional({ example: 'Torre de Belem' })
-  @Transform(aparar)
+  @Aparar()
   @OpcionalNaoNulo()
   @IsString({ message: 'O nome da atividade deve ser um texto' })
   @IsNotEmpty({ message: 'O nome da atividade nao pode ficar em branco' })

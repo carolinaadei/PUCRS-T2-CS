@@ -43,11 +43,23 @@ const MENSAGEM_POR_STATUS: Partial<Record<number, string>> = {
   503: 'Servico temporariamente indisponivel',
 };
 
-/** Erros que o body-parser do Express lanca antes de a requisicao chegar ao Nest. */
-interface ErroBodyParser {
-  type?: string;
-  status?: number;
+/**
+ * Erro do pacote http-errors, que o body-parser lanca antes de a requisicao
+ * chegar ao Nest: corpo grande demais (413), charset ou compressao nao
+ * suportados (415), envio interrompido (400). `expose` marca que o status e a
+ * mensagem podem ir para o cliente - e o que o http-errors faz em todo 4xx.
+ */
+interface ErroHttpExterno {
+  status: number;
+  expose: true;
 }
+
+const ehErroHttpExterno = (valor: unknown): valor is ErroHttpExterno =>
+  typeof valor === 'object' &&
+  valor !== null &&
+  typeof (valor as ErroHttpExterno).status === 'number' &&
+  (valor as ErroHttpExterno).status < 500 &&
+  (valor as ErroHttpExterno).expose === true;
 
 const ehCorpoErro = (valor: unknown): valor is CorpoErro =>
   typeof valor === 'object' && valor !== null && 'codigo' in valor && 'message' in valor;
@@ -100,20 +112,20 @@ export class FiltroErros implements ExceptionFilter {
       return this.traduzirPrisma(excecao);
     }
 
-    const bodyParser = excecao as ErroBodyParser;
-    if (bodyParser?.type === 'entity.too.large') {
-      return {
-        status: HttpStatus.PAYLOAD_TOO_LARGE,
-        codigo: CodigoErro.CORPO_GRANDE_DEMAIS,
-        mensagem: MENSAGEM_POR_STATUS[413]!,
-      };
-    }
-    if (bodyParser?.type === 'entity.parse.failed') {
-      return {
-        status: HttpStatus.BAD_REQUEST,
-        codigo: CodigoErro.JSON_INVALIDO,
-        mensagem: 'O corpo da requisicao nao e um JSON valido',
-      };
+    // O status do body-parser e preservado: e erro de quem enviou, nao da API.
+    if (ehErroHttpExterno(excecao)) {
+      return excecao.status === HttpStatus.PAYLOAD_TOO_LARGE
+        ? {
+            status: excecao.status,
+            codigo: CodigoErro.CORPO_GRANDE_DEMAIS,
+            mensagem: MENSAGEM_POR_STATUS[413]!,
+          }
+        : {
+            status: excecao.status,
+            codigo: CodigoErro.CORPO_INVALIDO,
+            mensagem:
+              'O corpo da requisicao nao pode ser lido; envie JSON em UTF-8, sem compressao',
+          };
     }
 
     return this.erroInterno();

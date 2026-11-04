@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, TransformFnParams, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -14,9 +14,7 @@ import {
 } from 'class-validator';
 import { FORMATO_DIA } from '../../../common/utils/formatos';
 import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
-
-const apararOuNulo = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() || null : value;
+import { ApararOuNulo } from '../../../common/validacao/texto';
 
 /** Adicionar um destino do catalogo a uma viagem. */
 export class AdicionarDestinoViagemDto {
@@ -48,7 +46,7 @@ export class AdicionarDestinoViagemDto {
   saida?: string | null;
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Praias no sul da ilha' })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'A descricao deve ser um texto' })
   @MaxLength(2000, { message: 'A descricao deve ter no maximo 2000 caracteres' })
   @IsOptional()

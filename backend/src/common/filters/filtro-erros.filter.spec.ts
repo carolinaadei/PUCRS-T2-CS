@@ -85,14 +85,21 @@ describe('FiltroErros', () => {
     expect(JSON.stringify(resposta.corpo)).not.toMatch(/email|detalhe interno/);
   });
 
-  it('traduz os erros do body-parser', () => {
-    expect(responder({ type: 'entity.too.large', status: 413 })).toMatchObject({
-      status: 413,
-      corpo: { codigo: 'CORPO_GRANDE_DEMAIS' },
+  it.each([
+    [413, 'CORPO_GRANDE_DEMAIS'],
+    [415, 'CORPO_INVALIDO'],
+    [400, 'CORPO_INVALIDO'],
+  ])('preserva o status %p dos erros do body-parser', (status, codigo) => {
+    // Formato do http-errors: status e `expose`, que ele liga em todo 4xx.
+    expect(responder({ status, expose: true, type: 'qualquer' })).toMatchObject({
+      status,
+      corpo: { codigo },
     });
-    expect(responder({ type: 'entity.parse.failed', status: 400 }).corpo.codigo).toBe(
-      'JSON_INVALIDO',
-    );
+  });
+
+  it('erro com status mas sem `expose` nao e de cliente: vira 500', () => {
+    expect(responder({ status: 400 }).status).toBe(500);
+    expect(responder({ status: 502, expose: true }).status).toBe(500);
   });
 
   it('esconde qualquer falha inesperada atras de um 500 generico', () => {

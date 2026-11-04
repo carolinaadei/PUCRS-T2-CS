@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { BeforeApplicationShutdown, Inject, Injectable, Logger } from '@nestjs/common';
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,14 +17,16 @@ export const ARQUIVO_DE_VIDA = join(tmpdir(), 'viajajunto-worker-vivo');
 /**
  * Consome a fila de e-mails e entrega cada um pelo provedor configurado.
  *
- * So apaga a mensagem depois que o envio deu certo. Se o provedor falhar, a
- * mensagem reaparece na fila quando o VisibilityTimeout vence e e tentada de
- * novo; na terceira falha o SQS a move para a DLQ (RedrivePolicy da pilha).
+ * So apaga a mensagem depois que o envio deu certo. Se o provedor falhar - ou
+ * se a mensagem nem for um e-mail -, ela reaparece na fila quando o
+ * VisibilityTimeout vence; na terceira vez o SQS a move para a DLQ
+ * (RedrivePolicy da pilha).
  */
 @Injectable()
-export class ConsumidorEmails implements OnApplicationShutdown {
+export class ConsumidorEmails implements BeforeApplicationShutdown {
   private readonly logger = new Logger(ConsumidorEmails.name);
   private ativo = true;
+  private cicloAtual?: Promise<number>;
 
   constructor(
     private readonly fila: FilaEmailsService,
@@ -39,7 +41,8 @@ export class ConsumidorEmails implements OnApplicationShutdown {
     this.logger.log(`Consumindo a fila de e-mails; entrega via ${this.provedor.nome}`);
 
     while (this.ativo) {
-      await this.processarLote();
+      this.cicloAtual = this.processarLote();
+      await this.cicloAtual;
     }
 
     this.logger.log('Worker encerrado');
@@ -59,7 +62,12 @@ export class ConsumidorEmails implements OnApplicationShutdown {
     }
 
     let entregues = 0;
-    for (const { recibo, tentativa, mensagem } of recebidos) {
+    for (const { id, recibo, tentativa, mensagem } of recebidos) {
+      if (!mensagem) {
+        this.logger.warn(`Mensagem ${id} nao e um e-mail completo; segue para a DLQ`);
+        continue;
+      }
+
       try {
         await this.provedor.enviar(mensagem);
         await this.fila.confirmar(recibo);
@@ -75,7 +83,13 @@ export class ConsumidorEmails implements OnApplicationShutdown {
     return entregues;
   }
 
-  onApplicationShutdown(): void {
+  /**
+   * O Nest espera este hook antes de encerrar o processo: o ciclo em curso
+   * termina e confirma o que entregou. Sem esperar, um `docker stop` no meio do
+   * envio deixaria o e-mail sem confirmar, e ele seria enviado de novo.
+   */
+  async beforeApplicationShutdown(): Promise<void> {
     this.ativo = false;
+    await this.cicloAtual;
   }
 }

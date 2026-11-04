@@ -56,6 +56,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Tempo para o desligamento limpo (checkpoint), sem depender do padrao do Docker.
+    stop_grace_period: 30s
 
   ministack:
     # Tag fixa, e nao "latest": o ambiente nao muda sozinho quando sai versao nova.
@@ -72,6 +74,11 @@ services:
     volumes:
       - ministack_estado:/tmp/ministack-state
       - ministack_s3:/tmp/ministack-data/s3
+    # O estado e gravado no desligamento, depois que as requisicoes em curso
+    # terminam - inclusive o long polling do worker (ate 10 s). Sem folga, o
+    # Docker mata o processo antes (o padrao pode ser de 1 s, como no Docker
+    # Desktop) e um restart apaga a pilha, as filas e os segredos (medido).
+    stop_grace_period: 30s
     # A imagem traz HEALTHCHECK proprio (/_ministack/health).
 
   provisionar:
@@ -124,12 +131,15 @@ services:
       PORT: 3000
     ports:
       - '${API_PORT:-3000}:3000'
+    # O SIGTERM espera as requisicoes em curso e fecha o banco (enableShutdownHooks).
+    stop_grace_period: 15s
 
   worker:
-    # Mesma imagem da API (o segundo build sai inteiro do cache), outro comando.
-    build:
-      context: ./backend
+    # Mesma imagem da API, outro comando. Quem constroi e o servico `api`: dois
+    # builds da mesma tag em paralelo disputam a extracao da imagem e falham.
+    # `never` porque a imagem e local - nao ha registro de onde baixa-la.
     image: viajajunto-backend:local
+    pull_policy: never
     restart: unless-stopped
     command: ['node', 'dist/worker']
     depends_on:

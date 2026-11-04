@@ -134,6 +134,25 @@ describe('Convencoes da API (e2e)', () => {
       expect(body.codigo).toBe('JSON_INVALIDO');
     });
 
+    it('charset ou compressao que o body-parser nao le mantem o status do cliente', async () => {
+      const charset = await t
+        .http()
+        .post('/api/v1/auth/login')
+        .set('Content-Type', 'application/json; charset=latin2')
+        .send('{"email":"a@b.com","senha":"x"}')
+        .expect(415);
+      expect(charset.body.codigo).toBe('CORPO_INVALIDO');
+
+      const compressao = await t
+        .http()
+        .post('/api/v1/auth/login')
+        .set('Content-Type', 'application/json')
+        .set('Content-Encoding', 'gzip')
+        .send('nao-e-gzip')
+        .expect(400);
+      expect(compressao.body.codigo).toBe('CORPO_INVALIDO');
+    });
+
     it('corpo acima do limite vira CORPO_GRANDE_DEMAIS', async () => {
       const { body } = await t
         .http()

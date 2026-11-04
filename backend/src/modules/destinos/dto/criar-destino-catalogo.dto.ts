@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { CategoriaDestino } from '@prisma/client';
-import { Transform, TransformFnParams } from 'class-transformer';
 import {
   IsEnum,
   IsLatitude,
@@ -12,25 +11,19 @@ import {
   MaxLength,
 } from 'class-validator';
 import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
-
-const aparar = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() : value;
-
-/** Texto opcional: em branco vira null. */
-const apararOuNulo = ({ value }: TransformFnParams): unknown =>
-  typeof value === 'string' ? value.trim() || null : value;
+import { Aparar, ApararOuNulo } from '../../../common/validacao/texto';
 
 /** Cada destino do catalogo representa uma cidade. */
 export class CriarDestinoCatalogoDto {
   @ApiProperty({ example: 'Porto', description: 'Nome da cidade' })
-  @Transform(aparar)
+  @Aparar()
   @IsString({ message: 'O nome deve ser um texto' })
   @IsNotEmpty({ message: 'O nome do destino nao pode ficar em branco' })
   @MaxLength(120, { message: 'O nome deve ter no maximo 120 caracteres' })
   nome!: string;
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Portugal' })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'O pais deve ser um texto' })
   @MaxLength(80, { message: 'O pais deve ter no maximo 80 caracteres' })
   @IsOptional()
@@ -53,7 +46,7 @@ export class CriarDestinoCatalogoDto {
     nullable: true,
     example: 'Cidade historica as margens do Rio Douro.',
   })
-  @Transform(apararOuNulo)
+  @ApararOuNulo()
   @IsString({ message: 'A descricao deve ser um texto' })
   @MaxLength(2000, { message: 'A descricao deve ter no maximo 2000 caracteres' })
   @IsOptional()
@@ -89,7 +82,7 @@ export class AtualizarDestinoCatalogoDto extends PartialType(
   OmitType(CriarDestinoCatalogoDto, ['nome'] as const),
 ) {
   @ApiPropertyOptional({ example: 'Porto' })
-  @Transform(aparar)
+  @Aparar()
   @OpcionalNaoNulo()
   @IsString({ message: 'O nome deve ser um texto' })
   @IsNotEmpty({ message: 'O nome do destino nao pode ficar em branco' })

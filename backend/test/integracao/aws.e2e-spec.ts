@@ -29,7 +29,8 @@ const AMBIENTE_AWS = {
   AWS_ENDPOINT_URL: MINISTACK,
   S3_BUCKET_MIDIA: 'viajajunto-local-midia',
   S3_ENDPOINT_PUBLICO: MINISTACK,
-  SQS_FILA_EMAILS: 'viajajunto-local-emails',
+  // URL da fila no MiniStack (conta padrao 000000000000), como a pilha grava no SSM.
+  SQS_FILA_EMAILS: `${MINISTACK}/000000000000/viajajunto-local-emails`,
   UPLOAD_TAMANHO_MAXIMO_MB: '1',
 };
 
@@ -182,7 +183,7 @@ comMiniStack('Servicos AWS no MiniStack (integracao)', () => {
       expect(ambiente.RECUPERACAO_CODIGO_SECRET?.length).toBeGreaterThanOrEqual(32);
       expect(ambiente).toMatchObject({
         S3_BUCKET_MIDIA: 'viajajunto-local-midia',
-        SQS_FILA_EMAILS: 'viajajunto-local-emails',
+        SQS_FILA_EMAILS: expect.stringMatching(/\/000000000000\/viajajunto-local-emails$/),
         MAIL_PROVEDOR: 'ses',
         PUBLIC_URL: 'http://definido-no-ambiente',
       });

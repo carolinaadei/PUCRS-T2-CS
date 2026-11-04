@@ -1,6 +1,5 @@
 import {
   DeleteMessageCommand,
-  GetQueueUrlCommand,
   ReceiveMessageCommand,
   SendMessageCommand,
   SQSClient,
@@ -8,12 +7,14 @@ import {
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Configuracao } from '../config/configuracao';
-import { MensagemEmail } from '../modules/mail/mensagem-email';
+import { lerMensagemEmail, MensagemEmail } from '../modules/mail/mensagem-email';
 
 export interface EmailRecebido {
+  id: string;
   recibo: string;
   tentativa: number;
-  mensagem: MensagemEmail;
+  /** null quando o corpo nao e um e-mail completo. */
+  mensagem: MensagemEmail | null;
 }
 
 /**
@@ -25,8 +26,7 @@ export interface EmailRecebido {
 @Injectable()
 export class FilaEmailsService {
   private readonly cliente?: SQSClient;
-  private readonly fila?: string;
-  private url?: Promise<string>;
+  private readonly url?: string;
 
   constructor(config: ConfigService) {
     const aws = config.get<Configuracao['aws']>('aws')!;
@@ -35,7 +35,7 @@ export class FilaEmailsService {
       return;
     }
 
-    this.fila = aws.filaEmails;
+    this.url = aws.filaEmails;
     this.cliente = new SQSClient({
       region: aws.regiao,
       endpoint: aws.endpoint,
@@ -52,10 +52,7 @@ export class FilaEmailsService {
 
   async publicar(mensagem: MensagemEmail): Promise<void> {
     await this.sqs().send(
-      new SendMessageCommand({
-        QueueUrl: await this.urlDaFila(),
-        MessageBody: JSON.stringify(mensagem),
-      }),
+      new SendMessageCommand({ QueueUrl: this.url, MessageBody: JSON.stringify(mensagem) }),
     );
   }
 
@@ -63,7 +60,7 @@ export class FilaEmailsService {
   async receber(esperaSegundos = 20, maximo = 5): Promise<EmailRecebido[]> {
     const resposta = await this.sqs().send(
       new ReceiveMessageCommand({
-        QueueUrl: await this.urlDaFila(),
+        QueueUrl: this.url,
         MaxNumberOfMessages: maximo,
         WaitTimeSeconds: esperaSegundos,
         MessageSystemAttributeNames: ['ApproximateReceiveCount'],
@@ -71,16 +68,15 @@ export class FilaEmailsService {
     );
 
     return (resposta.Messages ?? []).map((mensagem) => ({
+      id: mensagem.MessageId ?? '?',
       recibo: mensagem.ReceiptHandle!,
       tentativa: Number(mensagem.Attributes?.ApproximateReceiveCount ?? 1),
-      mensagem: JSON.parse(mensagem.Body ?? '{}') as MensagemEmail,
+      mensagem: lerMensagemEmail(mensagem.Body),
     }));
   }
 
   async confirmar(recibo: string): Promise<void> {
-    await this.sqs().send(
-      new DeleteMessageCommand({ QueueUrl: await this.urlDaFila(), ReceiptHandle: recibo }),
-    );
+    await this.sqs().send(new DeleteMessageCommand({ QueueUrl: this.url, ReceiptHandle: recibo }));
   }
 
   private sqs(): SQSClient {
@@ -88,23 +84,5 @@ export class FilaEmailsService {
       throw new Error('Fila de e-mails nao configurada (SQS_FILA_EMAILS)');
     }
     return this.cliente;
-  }
-
-  /** Aceita a URL da fila ou so o nome, que e resolvido uma vez e guardado. */
-  private urlDaFila(): Promise<string> {
-    if (this.fila!.startsWith('http')) {
-      return Promise.resolve(this.fila!);
-    }
-
-    this.url ??= this.sqs()
-      .send(new GetQueueUrlCommand({ QueueName: this.fila }))
-      .then((resposta) => resposta.QueueUrl!)
-      .catch((erro: unknown) => {
-        // Nao guarda a falha: a proxima chamada tenta resolver de novo.
-        this.url = undefined;
-        throw erro;
-      });
-
-    return this.url;
   }
 }

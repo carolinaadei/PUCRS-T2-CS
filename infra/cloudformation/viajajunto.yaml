@@ -185,7 +185,8 @@ Resources:
     Properties:
       Name: !Sub '/viajajunto/${Ambiente}/SQS_FILA_EMAILS'
       Type: String
-      Value: !GetAtt FilaEmails.QueueName
+      # A URL da fila (o !Ref de uma AWS::SQS::Queue).
+      Value: !Ref FilaEmails
 
   ParametroProvedorEmail:
     Type: AWS::SSM::Parameter

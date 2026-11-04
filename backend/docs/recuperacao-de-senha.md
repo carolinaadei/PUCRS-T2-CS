@@ -23,7 +23,9 @@ API ──(etapa 1)──► fila SQS ──► worker ──► provedor (Brevo
 - Com `SQS_FILA_EMAILS` configurada (é o caso do `docker compose up`), a API só
   enfileira e responde. O worker (`node dist/worker`) entrega; se o provedor
   falhar, a mensagem volta para a fila e é tentada de novo. Na terceira falha ela
-  vai para a DLQ `viajajunto-<ambiente>-emails-dlq`, em vez de sumir.
+  vai para a DLQ `viajajunto-<ambiente>-emails-dlq`, em vez de sumir. Uma mensagem
+  que nem é um e-mail completo é pulada (sem derrubar as outras do lote) e segue o
+  mesmo caminho até a DLQ.
 - Sem a fila (API rodando com `npm run start:dev`), o e-mail é entregue na hora.
 
 O provedor é escolhido por `MAIL_PROVEDOR`:
@@ -44,7 +46,7 @@ Em produção só `ses` ou `brevo` são aceitos: a API não sobe com `log`.
 | `MAIL_PROVEDOR` | `log`, `ses` ou `brevo` |
 | `EMAIL_REMETENTE` / `EMAIL_REMETENTE_NOME` | Remetente. No Brevo, precisa estar validado no painel |
 | `BREVO_API_KEY` | Chave da API v3 do Brevo (começa com `xkeysib-`), obrigatória com `MAIL_PROVEDOR=brevo` |
-| `SQS_FILA_EMAILS` | Nome ou URL da fila; sem ela, o envio é direto |
+| `SQS_FILA_EMAILS` | URL da fila; sem ela, o envio é direto |
 
 O segredo é o *pepper* do hash: o banco guarda só o HMAC do código, nunca o código
 em si. Um código de 6 dígitos tem apenas 1.000.000 de valores possíveis, então um

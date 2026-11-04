@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { FilaEmailsService } from '../../aws/fila-emails.service';
 import { Configuracao } from '../../config/configuracao';
 import { MailService } from './mail.service';
-import { MensagemEmail, ProvedorEmail } from './mensagem-email';
+import { lerMensagemEmail, MensagemEmail, ProvedorEmail } from './mensagem-email';
 import {
   ProvedorEmailBrevo,
   ProvedorEmailLog,
@@ -104,5 +104,23 @@ describe('provedores de e-mail', () => {
     await expect(brevo.enviar(mensagem)).rejects.toThrow(
       'Brevo respondeu 401: {"code":"unauthorized"}',
     );
+  });
+});
+
+describe('lerMensagemEmail', () => {
+  it('le um e-mail completo', () => {
+    expect(lerMensagemEmail(JSON.stringify(mensagem))).toEqual(mensagem);
+  });
+
+  it.each([undefined, '', 'nao-e-json', 'null', '{}', '[]', '{"para":{"email":1}}'])(
+    'devolve null para o que nao e e-mail: %p',
+    (corpo) => {
+      expect(lerMensagemEmail(corpo)).toBeNull();
+    },
+  );
+
+  it('exige assunto, html e texto alem do destinatario', () => {
+    // JSON.stringify omite o campo undefined: o corpo chega sem `texto`.
+    expect(lerMensagemEmail(JSON.stringify({ ...mensagem, texto: undefined }))).toBeNull();
   });
 });

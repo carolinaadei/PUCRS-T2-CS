@@ -61,10 +61,6 @@ export class ArmazenamentoService {
       : `https://${this.bucket}.s3.${aws.regiao}.amazonaws.com`;
   }
 
-  get disponivel(): boolean {
-    return this.cliente !== undefined;
-  }
-
   async autorizarUpload(pasta: string, tipo: TipoDeImagem): Promise<UploadAutorizado> {
     if (!this.cliente || !this.bucket || !this.baseUrlPublica) {
       throw indisponivel(

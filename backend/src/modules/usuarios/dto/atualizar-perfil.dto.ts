@@ -1,13 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, TransformFnParams } from 'class-transformer';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
+import { Aparar } from '../../../common/validacao/texto';
 
 export class AtualizarPerfilDto {
   @ApiPropertyOptional({ example: 'Bruno Lima' })
-  @Transform(({ value }: TransformFnParams): unknown =>
-    typeof value === 'string' ? value.trim() : value,
-  )
+  @Aparar()
   @OpcionalNaoNulo()
   @IsString({ message: 'O nome deve ser um texto' })
   @MinLength(2, { message: 'O nome deve ter no minimo 2 caracteres' })

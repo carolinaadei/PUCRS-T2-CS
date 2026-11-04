@@ -56,18 +56,12 @@ describe('carregarConfiguracaoDaAws', () => {
     expect(parametros).toHaveBeenCalledTimes(2);
   });
 
-  it('tenta de novo antes de desistir, e entao falha o boot com a causa', async () => {
-    jest.useFakeTimers();
+  it('falha o boot dizendo o que nao foi lido (repetir e papel do SDK)', async () => {
     segredos.mockRejectedValue(new Error('ResourceNotFound'));
 
-    const resultado = expect(
+    await expect(
       carregarConfiguracaoDaAws({ CONFIG_AWS_SEGREDOS: 'nao-existe' }, logger as never),
     ).rejects.toThrow('Nao foi possivel ler o segredo nao-existe: Error: ResourceNotFound');
-    // Espera exponencial: 0,5 + 1 + 2 + 4 s entre as 5 tentativas.
-    await jest.advanceTimersByTimeAsync(8_000);
-    await resultado;
-
-    expect(segredos).toHaveBeenCalledTimes(5);
-    jest.useRealTimers();
+    expect(segredos).toHaveBeenCalledTimes(1);
   });
 });

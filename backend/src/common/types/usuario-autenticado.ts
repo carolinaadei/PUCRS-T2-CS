@@ -22,6 +22,5 @@ export type PapelNaViagem = 'CRIADOR' | PermissaoMembro;
 /** O que o AcessoViagemGuard descobriu sobre a viagem, guardado em `req.viagemContexto`. */
 export interface ContextoViagem {
   viagemId: string;
-  criadoPor: number;
   papel: PapelNaViagem;
 }

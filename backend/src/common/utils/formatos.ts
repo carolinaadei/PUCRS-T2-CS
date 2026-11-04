@@ -27,6 +27,10 @@ export function deDia(valor: string, campo: string): Date {
   return data;
 }
 
+/** Data do corpo de um POST/PATCH: omitida mantem `atual`, null apaga, string vira dia. */
+export const dataDoCorpo = (valor: string | null | undefined, atual: Date | null, campo: string) =>
+  valor === undefined ? atual : valor === null ? null : deDia(valor, campo);
+
 /**
  * Valor monetario sempre como string com duas casas ("1250.50"): numero em
  * ponto flutuante perde centavos, e o formato fixo evita "1250.5" num lugar e

@@ -17,8 +17,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "db:up": "docker compose -f ../docker-compose.yml up -d --wait postgres",
-    "db:down": "docker compose -f ../docker-compose.yml stop postgres",
+    "db:up": "docker compose --env-file .env -f ../docker-compose.yml up -d --wait postgres",
+    "db:down": "docker compose --env-file .env -f ../docker-compose.yml stop postgres",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -26,7 +26,7 @@
     "test:integracao": "jest --config ./test/jest-e2e.json --runInBand test/integracao",
     "test:cov:e2e": "jest --config ./test/jest-e2e.json --runInBand --coverage",
     "openapi:gerar": "ts-node -P tsconfig.json scripts/gerar-openapi.ts",
-    "infra:up": "docker compose -f ../docker-compose.yml up -d --wait ministack && docker compose -f ../docker-compose.yml run --rm provisionar",
+    "infra:up": "docker compose --env-file .env -f ../docker-compose.yml up -d --wait ministack && docker compose --env-file .env -f ../docker-compose.yml run --rm provisionar",
     "start:worker": "nest start --entryFile worker"
   },
   "_comentario_overrides": [

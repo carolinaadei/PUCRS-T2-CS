@@ -17,10 +17,11 @@ async function iniciar() {
   const { ConsumidorEmails } = await import('./worker/consumidor-emails');
 
   const app = await NestFactory.createApplicationContext(WorkerModule, { logger });
+  // No SIGTERM o Nest roda os hooks (o consumidor termina o ciclo em curso) e
+  // encerra o processo; o loop abaixo so para por esse caminho.
   app.enableShutdownHooks();
 
   await app.get(ConsumidorEmails).executar();
-  await app.close();
 }
 
 void iniciar();
