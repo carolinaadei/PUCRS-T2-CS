@@ -50,8 +50,9 @@ cascatas no banco, upload assinado no S3, fila de e-mails no SQS e leitura de
 segredos e parâmetros. Um erro no modelo CloudFormation derruba o job já no passo
 de aplicar a pilha.
 
-As suítes de integração se auto-pulam sem `DATABASE_URL_TESTE` (e a de AWS, sem
-`MINISTACK_TESTE`), para `npm run test:e2e` continuar rodando numa máquina sem nada.
+As suítes de integração se auto-pulam, com um aviso no log, sem `DATABASE_URL_TESTE`
+(e a de AWS, sem `MINISTACK_TESTE`), para `npm run test:e2e` continuar rodando numa
+máquina sem nada.
 
 Qualquer teste que quebre derruba o job, e com ele o PR.
 

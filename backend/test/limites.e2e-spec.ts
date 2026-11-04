@@ -42,6 +42,16 @@ describe('Limites de requisicao (e2e)', () => {
     });
   });
 
+  it('convites: 20 consultas por minuto; a 21a recebe MUITAS_REQUISICOES', async () => {
+    // O limite roda antes da autenticacao: sem token cada consulta e 401, mas conta.
+    for (let tentativa = 1; tentativa <= 20; tentativa++) {
+      await t.http().get('/api/v1/convites/K7M2Q9XA').expect(401);
+    }
+
+    const { body } = await t.http().get('/api/v1/convites/K7M2Q9XA').expect(429);
+    expect(body.codigo).toBe('MUITAS_REQUISICOES');
+  });
+
   it('as sondas de saude nao entram no limite', async () => {
     for (let i = 0; i < 120; i++) {
       await t.http().get('/api/health/live').expect(200);

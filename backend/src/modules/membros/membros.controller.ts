@@ -45,9 +45,15 @@ const ApiParamCodigo = () =>
 const ApiConviteInvalido = () =>
   ApiErro(404, CodigoErro.CONVITE_INVALIDO, 'Codigo de convite invalido ou substituido');
 
-/** Quem recebeu o codigo ve a viagem e aceita o convite. */
+/**
+ * Quem recebeu o codigo ve a viagem e aceita o convite. As duas rotas dizem se
+ * um codigo existe, entao as duas tem o limite que encarece adivinhar codigos
+ * (sao ~10^12 combinacoes).
+ */
 @ApiTags('Colaboracao')
 @ApiAutenticado()
+@Throttle({ global: { limit: 20, ttl: 60_000 } })
+@ApiErro(429, CodigoErro.MUITAS_REQUISICOES, 'Mais de 20 tentativas por minuto')
 @Controller('convites')
 export class ConvitesController {
   constructor(private readonly membrosService: MembrosService) {}
@@ -64,8 +70,6 @@ export class ConvitesController {
     return this.membrosService.verConvite(codigo);
   }
 
-  // Encarece a tentativa de adivinhar codigos (sao ~10^12 combinacoes).
-  @Throttle({ global: { limit: 20, ttl: 60_000 } })
   @Post(':codigo/aceitar')
   @ApiParamCodigo()
   @ApiOperation({

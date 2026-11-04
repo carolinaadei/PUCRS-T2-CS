@@ -9,15 +9,9 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Publico } from '../../common/decorators/publico.decorator';
-import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
 import { MensagemDto } from '../../common/dto/mensagem.dto';
 import { CodigoErro } from '../../common/erros/codigos-erro';
-import {
-  ApiAutenticado,
-  ApiErro,
-  ApiErroValidacao,
-} from '../../common/swagger/api-respostas.decorator';
-import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
+import { ApiErro, ApiErroValidacao } from '../../common/swagger/api-respostas.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RecuperarSenhaDto } from './dto/recuperar-senha.dto';
@@ -93,21 +87,21 @@ export class AuthController {
     return this.authService.renovar(dto.refreshToken);
   }
 
+  // Publico: o refreshToken e a credencial revogada, e o accessToken pode ja ter expirado.
+  @Publico()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiAutenticado()
   @ApiOperation({
     summary: 'Sair deste dispositivo',
     description:
-      'Revoga o refreshToken informado. O accessToken atual expira sozinho em minutos; para ' +
-      'derrubar todos os dispositivos na hora, use DELETE /usuarios/eu/sessoes.',
+      'Revoga o refreshToken informado; nao exige o accessToken, que expira sozinho em ' +
+      'minutos. Responde 204 tambem para token que ja nao valia. Para derrubar todos os ' +
+      'dispositivos na hora, use DELETE /usuarios/eu/sessoes.',
   })
   @ApiNoContentResponse({ description: 'Sessao encerrada' })
-  async logout(
-    @UsuarioAtual() usuario: UsuarioAutenticado,
-    @Body() dto: RefreshTokenDto,
-  ): Promise<void> {
-    await this.authService.logout(usuario.id, dto.refreshToken);
+  @ApiErroValidacao('Informe o refreshToken')
+  async logout(@Body() dto: RefreshTokenDto): Promise<void> {
+    await this.authService.logout(dto.refreshToken);
   }
 
   @Publico()

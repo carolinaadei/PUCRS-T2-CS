@@ -172,20 +172,21 @@ export class AuthService {
    * depois (um front que tenta renovar apos sair) e so invalido, e nao derruba
    * as outras sessoes do usuario.
    */
-  async logout(usuarioId: number, refreshToken: string): Promise<void> {
-    await this.prisma.sessaoRefresh.deleteMany({
-      where: { usuarioId, tokenHash: sha256(refreshToken) },
-    });
+  async logout(refreshToken: string): Promise<void> {
+    await this.prisma.sessaoRefresh.deleteMany({ where: { tokenHash: sha256(refreshToken) } });
   }
 
   /**
    * Encerra todas as sessoes: apaga os refresh tokens e incrementa a versao de
-   * sessao, o que faz a JwtStrategy recusar os access tokens ja emitidos.
+   * sessao, o que faz a JwtStrategy recusar os access tokens ja emitidos. As duas
+   * escritas vao na mesma transacao: so uma delas deixaria tokens valendo.
    */
-  async encerrarTodasAsSessoes(
-    usuarioId: number,
-    tx: Prisma.TransactionClient = this.prisma,
-  ): Promise<void> {
+  async encerrarTodasAsSessoes(usuarioId: number): Promise<void> {
+    await this.prisma.$transaction((tx) => this.revogarSessoes(tx, usuarioId));
+  }
+
+  /** As escritas de `encerrarTodasAsSessoes`, dentro de uma transacao ja aberta. */
+  private async revogarSessoes(tx: Prisma.TransactionClient, usuarioId: number): Promise<void> {
     await tx.sessaoRefresh.deleteMany({ where: { usuarioId } });
     await tx.usuario.update({
       where: { id: usuarioId },
@@ -209,7 +210,7 @@ export class AuthService {
     const senhaHash = await this.gerarHash(novaSenha);
 
     const usuario = await this.prisma.$transaction(async (tx) => {
-      await this.encerrarTodasAsSessoes(usuarioId, tx);
+      await this.revogarSessoes(tx, usuarioId);
       return tx.usuario.update({
         where: { id: usuarioId },
         data: { senhaHash },
@@ -404,7 +405,7 @@ export class AuthService {
       }
 
       // Quem estava com um token roubado perde o acesso junto com a senha antiga.
-      await this.encerrarTodasAsSessoes(registro.usuarioId, tx);
+      await this.revogarSessoes(tx, registro.usuarioId);
       await tx.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } });
     });
   }

@@ -6,7 +6,8 @@
  * por ser versionado no .gitignore. Atribuimos so o que estiver faltando: quem
  * tem um `.env` local continua rodando com os proprios valores.
  *
- * Nenhum teste toca o banco - o PrismaService e substituido por mock.
+ * As suites de test/integracao trocam esta DATABASE_URL pela DATABASE_URL_TESTE
+ * (veja test/apoio/app.ts); as demais substituem o PrismaService por mock.
  *
  * Usado tambem por scripts/gerar-openapi.ts, que sobe o AppModule fora do Jest e
  * esbarra na mesma validacao.

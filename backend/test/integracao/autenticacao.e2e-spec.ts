@@ -117,7 +117,7 @@ comBanco('Autenticacao e conta (integracao)', () => {
       expect(body.codigo).toBe('SESSAO_ENCERRADA');
     });
 
-    it('logout revoga so a sessao informada', async () => {
+    it('logout revoga so a sessao informada, sem exigir o access token', async () => {
       const conta = await registrar(t.http, 'Caio', 'caio@teste.com');
       const { body: outra } = await t
         .http()
@@ -128,7 +128,6 @@ comBanco('Autenticacao e conta (integracao)', () => {
       await t
         .http()
         .post('/api/v1/auth/logout')
-        .set(bearer(conta.token))
         .send({ refreshToken: conta.refreshToken })
         .expect(204);
 

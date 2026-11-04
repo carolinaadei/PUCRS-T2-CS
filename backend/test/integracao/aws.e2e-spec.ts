@@ -7,11 +7,11 @@ import { ConsumidorEmails } from '../../src/worker/consumidor-emails';
 import {
   AppDeTeste,
   bearer,
-  comBanco,
   Conta,
   criarApp,
   limparBanco,
   registrar,
+  suiteQueExige,
 } from '../apoio/app';
 
 /**
@@ -20,7 +20,7 @@ import {
  * do CI). Sem MINISTACK_TESTE (ex.: http://localhost:4566) a suite e pulada.
  */
 const MINISTACK = process.env.MINISTACK_TESTE;
-const comMiniStack: jest.Describe = MINISTACK ? comBanco : describe.skip;
+const comMiniStack = suiteQueExige('DATABASE_URL_TESTE', 'MINISTACK_TESTE');
 
 const AMBIENTE_AWS = {
   AWS_REGION: 'us-east-1',
@@ -133,14 +133,13 @@ comMiniStack('Servicos AWS no MiniStack (integracao)', () => {
       await new Promise((resolver) => setTimeout(resolver, 300));
       expect(t.emails.ultimaPara('ana@teste.com')).toBeUndefined();
 
+      // A fila pode ter sobras de outras execucoes; o que importa e o e-mail da Ana.
       const worker = new ConsumidorEmails(t.app.get(FilaEmailsService), t.emails);
-      let entregues = 0;
-      for (let ciclo = 0; ciclo < 5 && entregues === 0; ciclo++) {
-        entregues = await worker.processarLote(1);
+      for (let ciclo = 0; ciclo < 5 && !t.emails.ultimaPara('ana@teste.com'); ciclo++) {
+        await worker.processarLote(1);
       }
 
-      expect(entregues).toBe(1);
-      expect(t.emails.ultimaPara('ana@teste.com')!.texto).toMatch(/\b\d{6}\b/);
+      expect(t.emails.ultimaPara('ana@teste.com')?.texto).toMatch(/\b\d{6}\b/);
     });
 
     it('o provedor SES entrega, e o MiniStack guarda o e-mail para inspecao', async () => {

@@ -68,7 +68,7 @@ descomente o bloco AWS do `.env`.
 | `npm run build` | Compila para `dist/` |
 | `npm run lint` / `lint:ci` | ESLint + Prettier (com correção / sem warnings) |
 | `npm test` / `test:cov` | Testes unitários |
-| `npm run test:e2e` | E2E; as suítes de integração rodam se houver `DATABASE_URL_TESTE` (e `MINISTACK_TESTE`) |
+| `npm run test:e2e` | E2E; as suítes de integração rodam se houver `DATABASE_URL_TESTE` (e `MINISTACK_TESTE`); sem elas, são puladas com um aviso |
 | `npm run test:integracao` | Só as suítes de integração |
 | `npm run db:up` / `db:down` | Sobe/para o Postgres do compose |
 | `npm run infra:up` | Sobe o MiniStack e aplica a pilha CloudFormation |
@@ -112,7 +112,7 @@ Todas sob `/api/v1` (exceto health). Detalhes, exemplos e erros no Swagger.
 | `POST` | `/auth/registrar` | RF01 | Público |
 | `POST` | `/auth/login` | RF02 | Público |
 | `POST` | `/auth/refresh` | RF02 | Público |
-| `POST` | `/auth/logout` | RF02 | Autenticado |
+| `POST` | `/auth/logout` | RF02 | Público |
 | `POST` | `/auth/recuperar-senha` · `/auth/verificar-codigo` · `/auth/redefinir-senha` | RF03 | Público |
 | `GET` · `PATCH` | `/usuarios/eu` | — | Autenticado |
 | `PUT` | `/usuarios/eu/senha` | RF02 | Autenticado |

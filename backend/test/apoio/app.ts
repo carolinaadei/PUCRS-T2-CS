@@ -115,16 +115,31 @@ export const limparBanco = (app: INestApplication) =>
     .$executeRawUnsafe(`TRUNCATE TABLE ${TABELAS.join(', ')} RESTART IDENTITY CASCADE`);
 
 /**
- * Suites que precisam de um PostgreSQL de verdade. Sem DATABASE_URL_TESTE elas
- * sao puladas, para `npm run test:e2e` seguir rodando sem banco.
- *
- * O banco precisa ser dedicado: as tabelas sao truncadas entre as suites.
+ * Declara uma suite que precisa de servicos de verdade. Sem as variaveis ela e
+ * pulada com um aviso, para `npm run test:e2e` seguir rodando numa maquina sem
+ * nada, sem esconder que a regra de negocio ficou sem teste.
  */
-export const URL_BANCO_TESTE = process.env.DATABASE_URL_TESTE;
-export const comBanco: jest.Describe = URL_BANCO_TESTE ? describe : describe.skip;
+export const suiteQueExige =
+  (...variaveis: string[]) =>
+  (nome: string, corpo: () => void): void => {
+    const faltando = variaveis.filter((variavel) => !process.env[variavel]);
+    if (faltando.length > 0) {
+      // Direto no stderr: o Jest descarta o console.* de arquivos sem teste executado.
+      process.stderr.write(`Suite pulada (defina ${faltando.join(' e ')}): ${nome}\n`);
+      describe.skip(nome, corpo);
+    } else {
+      describe(nome, corpo);
+    }
+  };
 
-if (URL_BANCO_TESTE) {
-  process.env.DATABASE_URL = URL_BANCO_TESTE;
+/**
+ * Suites que precisam de um PostgreSQL de verdade. O banco precisa ser dedicado:
+ * as tabelas sao truncadas entre as suites.
+ */
+export const comBanco = suiteQueExige('DATABASE_URL_TESTE');
+
+if (process.env.DATABASE_URL_TESTE) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_TESTE;
 }
 
 export const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
