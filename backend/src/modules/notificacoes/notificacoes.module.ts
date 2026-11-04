@@ -1,10 +1,18 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { NotificacoesController } from './notificacoes.controller';
+import { NotificacoesInterceptor } from './notificacoes.interceptor';
+import { NotificacoesService } from './notificacoes.service';
 
-// TODO (RF21 - prioridade Media): notificacoes in-app para colaboradores quando
-// houver alteracoes relevantes na viagem. O contrato ja esta no controller;
-// falta a tabela propria e a emissao dos eventos (avaliar o EventEmitter do Nest).
 @Module({
   controllers: [NotificacoesController],
+  providers: [
+    NotificacoesService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: NotificacoesInterceptor,
+    },
+  ],
+  exports: [NotificacoesService],
 })
 export class NotificacoesModule {}

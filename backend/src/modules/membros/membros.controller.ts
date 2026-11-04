@@ -37,6 +37,7 @@ import { MembrosService } from './membros.service';
 const ApiParamMembro = () =>
   ApiParam({
     name: 'membroId',
+    type: Number,
     description: 'Id do vinculo (campo `id` do colaborador), nao o do usuario',
     example: 1,
   });
@@ -50,10 +51,10 @@ export class MembrosController {
   constructor(private readonly membrosService: MembrosService) {}
 
   // Sem @NivelAcesso: quem entra ainda nao e membro. O proprio codigo da viagem
-  // funciona como convite (RF18).
+  // funciona como convite.
   @Post('entrar')
   @ApiOperation({
-    summary: 'RF18 - Entrar na viagem pelo codigo de convite',
+    summary: 'Entrar na viagem pelo codigo de convite',
     description: 'O codigo da viagem e o convite. Quem entra comeca como VISUALIZADOR.',
   })
   @ApiCreatedResponse({ type: MembroDto })
@@ -79,11 +80,11 @@ export class MembrosController {
   @NivelAcesso(NivelAcessoViagem.CRIADOR)
   @ApiParamMembro()
   @ApiOperation({
-    summary: 'RF20, RN04 - Alterar permissao de um colaborador',
+    summary: 'Alterar permissao de um colaborador',
     description: 'Alterna entre EDITOR e VISUALIZADOR. So o criador.',
   })
   @ApiOkResponse({ type: MembroDto })
-  @ApiErroValidacao('permissao must be one of the following values: EDITOR, VISUALIZADOR')
+  @ApiErroValidacao('Permissao invalida: use EDITOR ou VISUALIZADOR')
   @ApiAcessoViagem(NivelAcessoViagem.CRIADOR, 'colaborador nao encontrado nesta viagem')
   definirPermissao(
     @Param('viagemId') viagemId: string,
@@ -116,7 +117,7 @@ export class MembrosController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParamMembro()
   @ApiOperation({
-    summary: 'RF20, RN04 - Remover colaborador da viagem',
+    summary: 'Remover colaborador da viagem',
     description: 'So o criador.',
   })
   @ApiNoContentResponse({ description: 'Colaborador removido' })
