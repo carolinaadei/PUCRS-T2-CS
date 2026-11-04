@@ -217,9 +217,25 @@ jobs:
           # Attestations nao podem ser carregadas no daemon local (load: true).
           provenance: false
 
+      # O setup-trivy interno da trivy-action baixa o binario pelo redirecionador
+      # get.trivy.dev, cujo DNS esta fora do ar (curl exit code 6). Baixar direto
+      # do GitHub Releases com conferencia do SHA-256 evita essa dependencia.
+      - name: Instalar o Trivy
+        run: |
+          set -euo pipefail
+          VERSAO="0.70.0"
+          ARQUIVO="trivy_${VERSAO}_Linux-64bit.tar.gz"
+          SHA256="8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9"
+          curl -fsSL -o "/tmp/${ARQUIVO}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${VERSAO}/${ARQUIVO}"
+          echo "${SHA256}  /tmp/${ARQUIVO}" | sha256sum -c -
+          sudo tar -xzf "/tmp/${ARQUIVO}" -C /usr/local/bin trivy
+          rm -f "/tmp/${ARQUIVO}"
+
       - name: Escanear vulnerabilidades
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          skip-setup-trivy: true
           image-ref: ${{ env.IMAGEM_LOCAL }}
           scanners: vuln
           vuln-type: os,library
