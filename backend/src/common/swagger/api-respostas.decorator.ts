@@ -42,7 +42,7 @@ export const ApiAutenticado = () =>
 
 /** Parametro `:viagemId`, que e tambem o codigo de convite da viagem. */
 export const ApiParamViagem = () =>
-  ApiParam({ name: 'viagemId', description: 'Codigo da viagem', example: 'A3KD9F2P' });
+  ApiParam({ name: 'viagemId', description: 'Codigo da viagem', example: 'DEMO2027' });
 
 const MOTIVO_403: Partial<Record<NivelAcessoViagem, string>> = {
   [NivelAcessoViagem.EDITOR]: 'Seu nivel de permissao nesta viagem e somente leitura',
@@ -60,7 +60,7 @@ export const ApiAcessoViagem = (nivel: NivelAcessoViagem, outroNaoEncontrado?: s
     ApiErro(
       404,
       outroNaoEncontrado ? `${naoEncontrada}; ou ${outroNaoEncontrado}` : naoEncontrada,
-      'Viagem A3KD9F2P nao encontrada',
+      'Viagem DEMO2027 nao encontrada',
     ),
   ];
 

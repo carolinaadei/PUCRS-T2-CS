@@ -3,26 +3,26 @@ import { IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 /** RF08 - adicionar um destino do catalogo a uma viagem, com ordem de visita. */
 export class AdicionarDestinoViagemDto {
-  @ApiProperty({ example: 1, description: 'Id do destino no catalogo' })
+  @ApiProperty({ example: 2, description: 'Id do destino no catalogo' })
   @IsInt()
   destinoCatalogoId!: number;
 
-  @ApiPropertyOptional({ example: '2027-01-10' })
+  @ApiPropertyOptional({ example: '2027-01-17' })
   @IsDateString()
   @IsOptional()
   chegada?: string;
 
-  @ApiPropertyOptional({ example: '2027-01-14' })
+  @ApiPropertyOptional({ example: '2027-01-24' })
   @IsDateString()
   @IsOptional()
   saida?: string;
 
-  @ApiPropertyOptional({ example: 'Ficar no bairro de Alfama' })
+  @ApiPropertyOptional({ example: 'Praias no sul da ilha' })
   @IsString()
   @IsOptional()
   descricao?: string;
 
-  @ApiPropertyOptional({ example: 0, description: 'Ordem de visita; se omitida, vai para o fim' })
+  @ApiPropertyOptional({ example: 1, description: 'Ordem de visita; se omitida, vai para o fim' })
   @IsInt()
   @Min(0)
   @IsOptional()

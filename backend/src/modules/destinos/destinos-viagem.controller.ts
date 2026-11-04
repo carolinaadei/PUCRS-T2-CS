@@ -36,7 +36,7 @@ const ApiParamDestino = () =>
   ApiParam({
     name: 'destinoId',
     description: 'Id do destino na viagem (nao o do catalogo)',
-    example: 4,
+    example: 1,
   });
 
 /** Roteiro da viagem: quais destinos do catalogo entram e em que ordem. */

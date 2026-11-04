@@ -8,7 +8,7 @@ import { OrcamentoDto } from '../../orcamento/dto/orcamento-resposta.dto';
 
 /** RF04, RF07 - dados da viagem. */
 export class ViagemDto {
-  @ApiProperty({ example: 'A3KD9F2P', description: 'Codigo da viagem, tambem usado como convite' })
+  @ApiProperty({ example: 'DEMO2027', description: 'Codigo da viagem, tambem usado como convite' })
   id!: string;
 
   @ApiProperty({ example: 'Eurotrip 2027' })
@@ -17,7 +17,7 @@ export class ViagemDto {
   @ApiProperty({
     type: String,
     nullable: true,
-    example: 'Roteiro de 15 dias por Portugal, Espanha e Franca',
+    example: 'Viagem de demonstracao criada pelo seed.',
   })
   descricao!: string | null;
 
@@ -38,10 +38,10 @@ export class ViagemDto {
 }
 
 export class ContagemViagemDto {
-  @ApiProperty({ example: 2, description: 'Colaboradores, sem contar o criador' })
+  @ApiProperty({ example: 1, description: 'Colaboradores, sem contar o criador' })
   membros!: number;
 
-  @ApiProperty({ example: 3 })
+  @ApiProperty({ example: 1 })
   destinos!: number;
 }
 

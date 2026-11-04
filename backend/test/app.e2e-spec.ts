@@ -65,20 +65,17 @@ describe('AppModule (e2e)', () => {
       .expect(401);
   });
 
-  it.each([
-    ['/api/usuarios/eu/paises-visitados', 'Paises visitados ainda nao implementados'],
-    ['/api/notificacoes', 'Notificacoes ainda nao implementadas'],
-  ])('GET %s ainda responde 501', async (rota, mensagem) => {
+  it('GET /api/notificacoes ainda responde 501', async () => {
     const usuario = { id: 1, nome: 'Ana Souza', email: 'ana.souza@example.com', versaoSessao: 0 };
     prismaMock.usuario.findUnique.mockResolvedValueOnce(usuario);
     const token = app.get(JwtService).sign({ sub: usuario.id, email: usuario.email, ver: 0 });
 
     const resposta = await request(app.getHttpServer())
-      .get(rota)
+      .get('/api/notificacoes')
       .set('Authorization', `Bearer ${token}`)
       .expect(501);
 
-    expect(resposta.body.message).toBe(mensagem);
+    expect(resposta.body.message).toBe('Notificacoes ainda nao implementadas');
   });
 
   it('POST /api/auth/registrar rejeita payload invalido (400)', () => {

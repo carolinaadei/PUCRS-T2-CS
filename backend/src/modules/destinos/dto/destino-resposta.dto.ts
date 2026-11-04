@@ -16,7 +16,11 @@ export class DestinoCatalogoDto {
   @ApiProperty({ enum: CategoriaDestino, nullable: true, example: CategoriaDestino.CIDADE })
   categoria!: CategoriaDestino | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Capital portuguesa, a beira do Tejo' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Capital portuguesa, entre miradouros e o Tejo.',
+  })
   descricao!: string | null;
 
   @ApiProperty({ type: Number, nullable: true, example: 38.7223 })
@@ -25,7 +29,7 @@ export class DestinoCatalogoDto {
   @ApiProperty({ type: Number, nullable: true, example: -9.1393 })
   longitude!: number | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'https://exemplo.com/lisboa.jpg' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   fotoUrl!: string | null;
 }
 
@@ -41,10 +45,10 @@ export class PaginaDestinosDto extends PaginaBaseDto {
 
 /** Campos proprios do destino dentro de uma viagem (RF08). */
 export class DestinoViagemBaseDto {
-  @ApiProperty({ example: 4, description: 'Id do destino na viagem: e o {destinoId}' })
+  @ApiProperty({ example: 1, description: 'Id do destino na viagem: e o {destinoId}' })
   id!: number;
 
-  @ApiProperty({ example: 'A3KD9F2P' })
+  @ApiProperty({ example: 'DEMO2027' })
   viagemId!: string;
 
   @ApiProperty({ example: 1 })
@@ -53,10 +57,10 @@ export class DestinoViagemBaseDto {
   @ApiProperty({ type: Date, nullable: true, example: '2027-01-10T00:00:00.000Z' })
   chegada!: Date | null;
 
-  @ApiProperty({ type: Date, nullable: true, example: '2027-01-14T00:00:00.000Z' })
+  @ApiProperty({ type: Date, nullable: true, example: '2027-01-16T00:00:00.000Z' })
   saida!: Date | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Ficar no bairro de Alfama' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   descricao!: string | null;
 
   @ApiProperty({ example: 0, description: 'Ordem de visita, a partir de 0' })
@@ -69,7 +73,7 @@ export class DestinoViagemDto extends DestinoViagemBaseDto {
 }
 
 export class ContagemAtividadesDto {
-  @ApiProperty({ example: 3 })
+  @ApiProperty({ example: 1 })
   atividades!: number;
 }
 

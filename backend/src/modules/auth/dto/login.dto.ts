@@ -10,7 +10,7 @@ export class LoginDto {
   email!: string;
 
   /** Senha em texto plano para autenticacao. */
-  @ApiProperty({ example: 'senhaSegura123' })
+  @ApiProperty({ example: 'senha12345' })
   @IsString({ message: 'A senha deve ser uma string' })
   @IsNotEmpty({ message: 'A senha e obrigatoria' })
   senha!: string;

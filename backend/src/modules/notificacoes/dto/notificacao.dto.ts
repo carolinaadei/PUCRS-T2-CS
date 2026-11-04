@@ -3,10 +3,10 @@ import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
 
 /** RF21 - aviso in-app de uma alteracao relevante na viagem. */
 export class NotificacaoDto {
-  @ApiProperty({ example: 15 })
+  @ApiProperty({ example: 1 })
   id!: number;
 
-  @ApiProperty({ example: 'A3KD9F2P' })
+  @ApiProperty({ example: 'DEMO2027' })
   viagemId!: string;
 
   @ApiProperty({ example: 'ATIVIDADE_ADICIONADA', description: 'O que mudou na viagem' })

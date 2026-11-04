@@ -38,7 +38,7 @@ const ApiParamMembro = () =>
   ApiParam({
     name: 'membroId',
     description: 'Id do vinculo (campo `id` do colaborador), nao o do usuario',
-    example: 3,
+    example: 1,
   });
 
 @ApiTags('Colaboracao')
