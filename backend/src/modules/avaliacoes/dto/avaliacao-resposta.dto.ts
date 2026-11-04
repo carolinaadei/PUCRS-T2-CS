@@ -1,50 +1,39 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
+import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
 import { UsuarioResumoDto } from '../../auth/dto/resposta-autenticacao.dto';
 
-/**
- * Autor da avaliacao contendo apenas dados publicos (id e nome),
- * sem expor informacoes sensiveis como e-mail e hash de senha (RN01, RNF03).
- */
+/** Autor da avaliacao: so dados publicos, nunca o e-mail. */
 export class AutorAvaliacaoDto extends PickType(UsuarioResumoDto, ['id', 'nome'] as const) {}
 
-/**
- * RF22, RF23 - DTO de resposta para avaliacao de uma atividade do catalogo,
- * contendo nota, comentario opcional, data de criacao e dados do autor.
- */
+/** Avaliacao de uma atividade do catalogo. */
 export class AvaliacaoDto {
-  /** Identificador unico da avaliacao (usado no endpoint DELETE /avaliacoes/:avaliacaoId). */
-  @ApiProperty({
-    example: 1,
-    description: 'Id da avaliacao, usado em DELETE /avaliacoes/{avaliacaoId}',
-  })
+  @ApiProperty({ example: 1 })
   id!: number;
 
-  /** Identificador do usuario autor da avaliacao. */
-  @ApiProperty({ example: 1, description: 'Id do usuario autor' })
-  usuarioId!: number;
-
-  /** Identificador da atividade avaliada no catalogo. */
   @ApiProperty({ example: 1, description: 'Id da atividade no catalogo' })
   catalogoAtividadeId!: number;
 
-  /** Nota atribuida a atividade de 1 a 5 estrelas. */
   @ApiProperty({ example: 5, minimum: 1, maximum: 5, description: 'Nota de 1 a 5 estrelas' })
   nota!: number;
 
-  /** Comentario em texto deixado pelo autor, ou null caso nao informado. */
   @ApiProperty({
     type: String,
     nullable: true,
     example: 'Vale a pena chegar cedo para evitar a fila.',
-    description: 'Comentario opcional do usuario',
   })
   comentario!: string | null;
 
-  /** Data e horario em que a avaliacao foi registrada. */
-  @ApiProperty({ example: '2026-09-20T18:30:00.000Z', description: 'Data de criacao da avaliacao' })
+  @ApiProperty({ example: '2026-09-20T18:30:00.000Z' })
   criadoEm!: Date;
 
-  /** Dados resumidos do usuario autor da avaliacao. */
-  @ApiProperty({ type: AutorAvaliacaoDto, description: 'Dados publicos do autor' })
-  usuario!: AutorAvaliacaoDto;
+  @ApiProperty({ example: '2026-09-21T09:00:00.000Z', description: 'Ultima edicao da avaliacao' })
+  atualizadoEm!: Date;
+
+  @ApiProperty({ type: AutorAvaliacaoDto })
+  autor!: AutorAvaliacaoDto;
+}
+
+export class PaginaAvaliacoesDto extends PaginaBaseDto {
+  @ApiProperty({ type: [AvaliacaoDto] })
+  itens!: AvaliacaoDto[];
 }

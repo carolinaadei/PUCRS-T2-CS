@@ -13,7 +13,11 @@ export class MembroDto {
   @ApiProperty({ example: 2 })
   usuarioId!: number;
 
-  @ApiProperty({ enum: PermissaoMembro, example: PermissaoMembro.EDITOR })
+  @ApiProperty({
+    enum: PermissaoMembro,
+    enumName: 'PermissaoMembro',
+    example: PermissaoMembro.EDITOR,
+  })
   permissao!: PermissaoMembro;
 
   @ApiProperty({ example: '2026-09-21T12:00:00.000Z' })

@@ -1,37 +1,27 @@
-import { BadRequestException } from '@nestjs/common';
 import { PermissaoMembro } from '@prisma/client';
-import { criarPipeValidacao } from '../../../common/pipes/pipe-validacao';
+import { errosDoDto, validarDto } from '../../../../test/apoio/validar-dto';
 import { DefinirPermissaoDto } from './definir-permissao.dto';
-
-/** Passa o corpo pelo mesmo pipe da aplicacao, como numa requisicao de verdade. */
-const validar = (corpo: object) =>
-  criarPipeValidacao().transform(corpo, { type: 'body', metatype: DefinirPermissaoDto });
-
-const mensagensDoErro = (corpo: object) =>
-  validar(corpo).catch((erro: BadRequestException) => erro.getResponse());
 
 describe('DefinirPermissaoDto', () => {
   it.each([PermissaoMembro.EDITOR, PermissaoMembro.VISUALIZADOR])(
-    'aceita o nivel de permissao %s',
+    'aceita %s',
     async (permissao) => {
-      await expect(validar({ permissao })).resolves.toEqual({ permissao });
+      await expect(validarDto(DefinirPermissaoDto, { permissao })).resolves.toEqual({ permissao });
     },
   );
 
   it.each([{}, { permissao: '' }, { permissao: 'ADMIN' }, { permissao: null }])(
     'recusa permissao ausente ou fora dos niveis validos: %p',
     async (corpo) => {
-      await expect(mensagensDoErro(corpo)).resolves.toMatchObject({
-        message: ['Permissao invalida: use EDITOR ou VISUALIZADOR'],
-      });
+      await expect(errosDoDto(DefinirPermissaoDto, corpo)).resolves.toEqual([
+        { campo: 'permissao', mensagens: ['Permissao invalida: use EDITOR ou VISUALIZADOR'] },
+      ]);
     },
   );
 
-  it('recusa campos nao declarados no DTO', async () => {
+  it('recusa campo nao declarado, com a mensagem em portugues', async () => {
     await expect(
-      mensagensDoErro({ permissao: PermissaoMembro.EDITOR, usuarioId: 99 }),
-    ).resolves.toMatchObject({
-      message: ['property usuarioId should not exist'],
-    });
+      errosDoDto(DefinirPermissaoDto, { permissao: PermissaoMembro.EDITOR, usuarioId: 99 }),
+    ).resolves.toEqual([{ campo: 'usuarioId', mensagens: ['O campo usuarioId nao e permitido'] }]);
   });
 });

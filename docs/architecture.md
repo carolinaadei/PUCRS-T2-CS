@@ -1,11 +1,5 @@
 ## **Documento de Arquitetura de Software**
 
-**Histórico de Revisão**
-
-|Data|Versão|Descrição|Autor|
-| - | - | - | - |
-|25/08/2026|0.1|Versão inicial|Gustavo de Freitas Fidélis, Bernardo Lykawka Medeiros da Silva|
-
 ## **1. Introdução**
 
 ### **1.1 Finalidade**
@@ -93,7 +87,11 @@ O sistema é organizado em cinco blocos principais:
 
 A estrutura de diretórios segue a separação entre frontend e backend em repositórios ou módulos distintos. A organização interna de cada camada será definida pela equipe conforme o framework adotado.
 
-### **4.3 Diagrama de Classes**
+### **4.3 Infraestrutura**
+
+Os serviços gerenciados que a API consome — armazenamento de fotos (S3), fila de e-mails com DLQ (SQS), envio de e-mail (SES), segredos (Secrets Manager) e configuração (SSM Parameter Store) — são declarados em CloudFormation e, em desenvolvimento e no CI, aplicados no emulador MiniStack pelo próprio `docker compose up`. O mesmo modelo e a mesma imagem sobem na AWS sem alteração de código. Detalhes em [Infraestrutura (MiniStack)](infra-ministack.md).
+
+### **4.4 Diagrama de Classes**
 
 [Inserir diagrama de classes após definição do framework e linguagem de implementação.]
 
@@ -112,6 +110,7 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `categoria_destino` | `CIDADE`, `PRAIA`, `NATUREZA`, `CULTURAL` |
 | `tipo_atividade` | `PASSEIO`, `REFEICAO`, `HOSPEDAGEM`, `TRANSPORTE`, `OUTRO` |
 | `status_atividade` | `PENDENTE`, `CONFIRMADA`, `CONCLUIDA` |
+| `tipo_notificacao` | `VIAGEM_ATUALIZADA`, `DESTINO_ADICIONADO`, `DESTINO_ATUALIZADO`, `DESTINO_REMOVIDO`, `ATIVIDADE_ADICIONADA`, `ATIVIDADE_ATUALIZADA`, `ATIVIDADE_REMOVIDA`, `ORCAMENTO_ATUALIZADO`, `ORCAMENTO_REMOVIDO`, `MEMBRO_ENTROU`, `MEMBRO_SAIU`, `MEMBRO_REMOVIDO`, `PERMISSAO_ALTERADA` |
 
 #### Tabelas
 
@@ -123,13 +122,41 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `nome` | varchar | NOT NULL |
 | `email` | varchar | NOT NULL, UNIQUE |
 | `senha_hash` | varchar | NOT NULL |
+| `versao_sessao` | integer | default: 0 — incrementar invalida os tokens de acesso emitidos |
+| `criado_em` | timestamp | default: `now()` |
+
+**sessao_refresh**
+
+| Coluna | Tipo | Restrições |
+| ------ | ---- | ---------- |
+| `id` | integer | PK, auto-increment |
+| `usuario_id` | integer | NOT NULL, FK → usuario.id |
+| `token_hash` | varchar | NOT NULL, UNIQUE (SHA-256 do refresh token) |
+| `expira_em` | timestamp | NOT NULL |
+| `revogada_em` | timestamp | preenchido quando o token é trocado (rotação) |
+| `criada_em` | timestamp | default: `now()` |
+
+**token_recuperacao_senha**
+
+| Coluna | Tipo | Restrições |
+| ------ | ---- | ---------- |
+| `id` | integer | PK, auto-increment |
+| `usuario_id` | integer | NOT NULL, FK → usuario.id |
+| `codigo_hash` | varchar | NOT NULL (HMAC do código de 6 dígitos) |
+| `tentativas` | integer | default: 0 |
+| `expira_em` | timestamp | NOT NULL |
+| `verificado_em` | timestamp | |
+| `troca_hash` | varchar | UNIQUE |
+| `troca_expira_em` | timestamp | |
+| `usado_em` | timestamp | |
 | `criado_em` | timestamp | default: `now()` |
 
 **viagem**
 
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
-| `id/código_convite` | string | PK |
+| `id` | string | PK (8 caracteres) |
+| `codigo_convite` | string | NOT NULL, UNIQUE — pode ser trocado pelo criador |
 | `nome` | varchar | NOT NULL |
 | `descricao` | text | |
 | `data_inicio` | date | |
@@ -160,6 +187,8 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `latitude` | float | |
 | `longitude` | float | |
 | `foto_url` | varchar | |
+| `criado_por` | integer | FK → usuario.id (SET NULL); só quem cadastrou edita |
+| `criado_em` | timestamp | default: `now()` |
 
 > Como cada destino representa uma cidade do mundo, o campo `nome` deve indicar a cidade em si, e o país é informado separadamente para contextualização geográfica.
 
@@ -173,7 +202,7 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `chegada` | date | |
 | `saida` | date | |
 | `descricao` | text | |
-| `ordem` | integer | |
+| `ordem` | integer | sequência 0..n-1 por viagem |
 
 **catalogo_atividade**
 
@@ -190,8 +219,9 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `longitude` | float | |
 | `google_place_id` | varchar | UNIQUE |
 | `foto_url` | varchar | |
-| `fonte` | varchar | default: `google_places` |
-| `media_avaliacao` | float | default: 0 |
+| `fonte` | varchar | default: `manual` (`manual`, `seed` ou `google_places`) |
+| `media_avaliacao` | float | default: 0 (derivado) |
+| `criado_por` | integer | FK → usuario.id (SET NULL); só quem cadastrou edita |
 | `criado_em` | timestamp | default: `now()` |
 
 **atividade_viagem**
@@ -225,6 +255,19 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `nota` | integer | NOT NULL (1 a 5) |
 | `comentario` | text | |
 | `criado_em` | timestamp | default: `now()` |
+| `atualizado_em` | timestamp | default: `now()` |
+
+**notificacao**
+
+| Coluna | Tipo | Restrições |
+| ------ | ---- | ---------- |
+| `id` | integer | PK, auto-increment |
+| `usuario_id` | integer | NOT NULL, FK → usuario.id (destinatário) |
+| `viagem_id` | string | NOT NULL, FK → viagem.id |
+| `tipo` | tipo_notificacao | NOT NULL |
+| `mensagem` | text | NOT NULL |
+| `lida_em` | timestamp | null enquanto não lida |
+| `criada_em` | timestamp | default: `now()` |
 
 #### Relacionamentos
 
@@ -240,29 +283,41 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `orcamento.viagem_id` | `viagem.id` | 1:1 |
 | `avaliacao.usuario_id` | `usuario.id` | N:1 |
 | `avaliacao.catalogo_atividade_id` | `catalogo_atividade.id` | N:1 |
+| `sessao_refresh.usuario_id` | `usuario.id` | N:1 |
+| `token_recuperacao_senha.usuario_id` | `usuario.id` | N:1 |
+| `notificacao.usuario_id` | `usuario.id` | N:1 |
+| `notificacao.viagem_id` | `viagem.id` | N:1 |
+| `destino_catalogo.criado_por` | `usuario.id` | N:1 |
+| `catalogo_atividade.criado_por` | `usuario.id` | N:1 |
 
 ### **5.2 Diagrama Lógico de Dados**
 
 O DLD textual abaixo representa as tabelas com chaves primárias e estrangeiras destacadas:
 
 ```
-usuario(#id, nome, email, senha_hash, criado_em)
+usuario(#id, nome, email, senha_hash, versao_sessao, criado_em)
 
-viagem(#id, nome, descricao, data_inicio, data_fim, status, *criado_por→usuario, criado_em)
+sessao_refresh(#id, *usuario_id→usuario, token_hash, expira_em, revogada_em, criada_em)
+
+token_recuperacao_senha(#id, *usuario_id→usuario, codigo_hash, tentativas, expira_em, verificado_em, troca_hash, troca_expira_em, usado_em, criado_em)
+
+viagem(#id, codigo_convite, nome, descricao, data_inicio, data_fim, status, *criado_por→usuario, criado_em)
 
 membro_viagem(#id, *viagem_id→viagem, *usuario_id→usuario, permissao, entrou_em)
 
-destino_catalogo(#id, nome, pais, categoria, descricao, latitude, longitude, foto_url)
+destino_catalogo(#id, nome, pais, categoria, descricao, latitude, longitude, foto_url, *criado_por→usuario, criado_em)
 
 destino_viagem(#id, *viagem_id→viagem, *destino_catalogo_id→destino_catalogo, chegada, saida, descricao, ordem)
 
-catalogo_atividade(#id, nome, descricao, tipo_atividade, local, cidade, pais, latitude, longitude, google_place_id, foto_url, fonte, media_avaliacao, criado_em)
+catalogo_atividade(#id, nome, descricao, tipo_atividade, local, cidade, pais, latitude, longitude, google_place_id, foto_url, fonte, media_avaliacao, *criado_por→usuario, criado_em)
 
 atividade_viagem(#id, *destino_viagem_id→destino_viagem, *catalogo_atividade_id→catalogo_atividade, data_horario, duracao_min, custo_previsto, status)
 
 orcamento(#id, *viagem_id→viagem, valor_total, previsto_atividades)
 
-avaliacao(#id, *usuario_id→usuario, *catalogo_atividade_id→catalogo_atividade, nota, comentario, criado_em)
+avaliacao(#id, *usuario_id→usuario, *catalogo_atividade_id→catalogo_atividade, nota, comentario, criado_em, atualizado_em)
+
+notificacao(#id, *usuario_id→usuario, *viagem_id→viagem, tipo, mensagem, lida_em, criada_em)
 ```
 > Legenda: `#` chave primária · `*` chave estrangeira
 

@@ -42,8 +42,16 @@ Os dois `lcov` viram um artifact chamado `cobertura`, consumido pelo job do Sona
 A cobertura unitária sozinha ignoraria tudo que só é exercitado via HTTP —
 controllers, guards, pipes e filtros — por isso os dois relatórios são somados.
 
-Os e2e usam um `PrismaService` mockado, então **não precisam de banco no CI**. A
-suíte `integracao.e2e-spec.ts` se auto-pula quando não há um `DATABASE_URL` real.
+O job sobe um **PostgreSQL** e um **MiniStack** como *service containers*, aplica
+as migrations no banco de teste e a pilha `infra/cloudformation/viajajunto.yaml` no
+MiniStack (o mesmo `aws cloudformation deploy` do `docker compose up`). Com isso as
+suítes de `test/integracao/` rodam contra serviços reais: transações, travas e
+cascatas no banco, upload assinado no S3, fila de e-mails no SQS e leitura de
+segredos e parâmetros. Um erro no modelo CloudFormation derruba o job já no passo
+de aplicar a pilha.
+
+As suítes de integração se auto-pulam sem `DATABASE_URL_TESTE` (e a de AWS, sem
+`MINISTACK_TESTE`), para `npm run test:e2e` continuar rodando numa máquina sem nada.
 
 Qualquer teste que quebre derruba o job, e com ele o PR.
 
@@ -311,13 +319,21 @@ O merge desse PR (commit `14bc8a2`) fechou os dois últimos itens da entrega:
 Antes de abrir o PR, os mesmos comandos do CI:
 
 ```bash
+# Banco e MiniStack com a pilha aplicada (na raiz do repositorio)
+docker compose up -d --wait postgres ministack
+docker compose run --rm provisionar
+docker compose exec postgres createdb -U viajajunto viajajunto_test
+
 cd backend
 npm ci
 npx prisma generate
+export DATABASE_URL_TESTE="postgresql://viajajunto:viajajunto@localhost:5432/viajajunto_test?schema=public"
+export MINISTACK_TESTE=http://localhost:4566
+DATABASE_URL="$DATABASE_URL_TESTE" npx prisma migrate deploy
 
 npm run lint:ci          # portão 1
 npm run test:cov         # portão 2 (unitários)
-npm run test:cov:e2e     # portão 2 (e2e)
+npm run test:cov:e2e     # portão 2 (e2e + integração)
 npm run openapi:gerar    # portão 3 - gera backend/openapi.json
 npx @stoplight/spectral-cli lint openapi.json --ruleset ../.spectral.yaml
 

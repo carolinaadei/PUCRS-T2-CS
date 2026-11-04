@@ -1,9 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform, TransformFnParams } from 'class-transformer';
 import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 
-/** RF01 - cadastro de conta com nome, e-mail e senha. */
+/** Cadastro de conta com nome, e-mail e senha. */
 export class RegistrarDto {
   @ApiProperty({ example: 'Carla Mendes' })
+  // Aparado antes de validar, para que um nome so de espacos conte como em branco.
+  @Transform(({ value }: TransformFnParams): unknown =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString({ message: 'O nome deve ser um texto' })
   @IsNotEmpty({ message: 'O nome nao pode ficar em branco' })
   @MaxLength(120, { message: 'O nome deve ter no maximo 120 caracteres' })
@@ -14,7 +19,7 @@ export class RegistrarDto {
   @MaxLength(180, { message: 'O e-mail deve ter no maximo 180 caracteres' })
   email!: string;
 
-  @ApiProperty({ example: 'senha12345', minLength: 8 })
+  @ApiProperty({ example: 'senha12345', minLength: 8, maxLength: 72 })
   @IsString({ message: 'A senha deve ser um texto' })
   @MinLength(8, { message: 'A senha deve ter no minimo 8 caracteres' })
   @MaxLength(72, { message: 'A senha deve ter no maximo 72 caracteres' })

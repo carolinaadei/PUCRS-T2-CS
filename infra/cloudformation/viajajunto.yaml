@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: >-
+  Servicos gerenciados que a API ViajaJunto consome: armazenamento de fotos
+  (S3), fila de e-mails com DLQ (SQS), envio de e-mail (SES), segredos
+  gerados (Secrets Manager), configuracao (SSM Parameter Store) e logs.
+  O mesmo modelo sobe no MiniStack (docker compose up) e na AWS de verdade;
+  so o parametro Ambiente muda.
+
+Parameters:
+
+  Ambiente:
+    Type: String
+    Description: >-
+      Prefixo dos nomes dos recursos e do caminho dos parametros no SSM. Permite
+      varias pilhas na mesma conta sem colisao de nome.
+    Default: local
+    AllowedValues: [local, dev, prod]
+
+  OrigensFrontend:
+    Type: String
+    Description: >-
+      Origens do front, separadas por virgula. Vao para o CORS da API (parametro
+      CORS_ORIGINS) e para o CORS do bucket, que o navegador usa no upload.
+    Default: http://localhost:3001,http://localhost:5173,http://localhost:4200
+
+  UrlPublicaApi:
+    Type: String
+    Description: Endereco pelo qual os clientes alcancam a API (vai para o Swagger).
+    Default: http://localhost:3000
+
+  RemetenteEmail:
+    Type: String
+    Description: >-
+      Remetente dos e-mails da API. Na AWS, o SES envia um e-mail de confirmacao
+      para este endereco e so libera o envio depois do clique.
+    Default: nao-responda@viajajunto.local
+
+  RetencaoLogsDias:
+    Type: Number
+    Description: Dias de retencao do grupo de logs da API.
+    Default: 7
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90]
+
+Conditions:
+
+  # Versionamento custa armazenamento e nao agrega nada a um ambiente
+  # descartavel; fora do local ele protege fotos sobrescritas ou apagadas.
+  EhLocal: !Equals [!Ref Ambiente, local]
+
+Resources:
+
+  # ------------------------------------------------------------------ Fotos
+
+  # Fotos de destinos e atividades. O navegador envia direto para ca, com o
+  # formulario assinado que a API devolve em POST /api/v1/uploads.
+  BucketMidia:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'viajajunto-${Ambiente}-midia'
+      VersioningConfiguration:
+        Status: !If [EhLocal, Suspended, Enabled]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      # ACLs continuam bloqueadas; a leitura publica vem so da politica abaixo,
+      # e so para o prefixo publico/.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [GET, POST]
+            AllowedOrigins: !Split [',', !Ref OrigensFrontend]
+            AllowedHeaders: ['*']
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpa-uploads-incompletos
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  PoliticaBucketMidia:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketMidia
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LeituraPublicaDasFotos
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${BucketMidia.Arn}/publico/*'
+
+  # ----------------------------------------------------------------- E-mail
+
+  # Mensagens que falharam 3 vezes param aqui, em vez de sumirem.
+  FilaEmailsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'viajajunto-${Ambiente}-emails-dlq'
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  # A API so publica aqui; o worker (node dist/worker) consome e envia pelo SES.
+  FilaEmails:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'viajajunto-${Ambiente}-emails'
+      VisibilityTimeout: 60
+      ReceiveMessageWaitTimeSeconds: 20
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FilaEmailsDLQ.Arn
+        maxReceiveCount: 3
+
+  IdentidadeRemetente:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref RemetenteEmail
+
+  # --------------------------------------------------------------- Segredos
+
+  # Gerados pelo proprio CloudFormation: nunca existem em texto no modelo, no
+  # comando que criou a pilha nem no historico do shell. O valor e um JSON com
+  # o nome da variavel de ambiente, que a API le no boot (CONFIG_AWS_SEGREDOS).
+  SegredoJwt:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'viajajunto/${Ambiente}/jwt'
+      Description: Chave de assinatura dos access tokens.
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: JWT_SECRET
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  SegredoRecuperacao:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'viajajunto/${Ambiente}/recuperacao'
+      Description: Pepper do HMAC dos codigos de recuperacao de senha.
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: RECUPERACAO_CODIGO_SECRET
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  # ------------------------------------------------------------ Configuracao
+
+  # Tudo o que a API precisa saber sobre os recursos acima. Ela le o caminho
+  # inteiro no boot (CONFIG_AWS_PARAMETROS): nenhum nome de bucket ou fila fica
+  # escrito no docker-compose ou no codigo.
+  ParametroCors:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/CORS_ORIGINS'
+      Type: String
+      Value: !Ref OrigensFrontend
+
+  ParametroUrlPublica:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/PUBLIC_URL'
+      Type: String
+      Value: !Ref UrlPublicaApi
+
+  ParametroBucket:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/S3_BUCKET_MIDIA'
+      Type: String
+      Value: !Ref BucketMidia
+
+  ParametroFila:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/SQS_FILA_EMAILS'
+      Type: String
+      Value: !GetAtt FilaEmails.QueueName
+
+  ParametroProvedorEmail:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/MAIL_PROVEDOR'
+      Type: String
+      Value: ses
+
+  ParametroRemetente:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/viajajunto/${Ambiente}/EMAIL_REMETENTE'
+      Type: String
+      Value: !Ref RemetenteEmail
+
+  # ------------------------------------------------------------------- Logs
+
+  GrupoLogsApi:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/viajajunto/${Ambiente}/api'
+      RetentionInDays: !Ref RetencaoLogsDias
+
+Outputs:
+
+  BucketMidia:
+    Description: Bucket das fotos.
+    Value: !Ref BucketMidia
+
+  UrlFilaEmails:
+    Description: Fila de e-mails consumida pelo worker.
+    Value: !Ref FilaEmails
+
+  ArnFilaEmailsDLQ:
+    Description: Para onde vao os e-mails que falharam 3 vezes.
+    Value: !GetAtt FilaEmailsDLQ.Arn
+
+  Segredos:
+    Description: >-
+      Ids para CONFIG_AWS_SEGREDOS. Os valores nao saem aqui de proposito; leia
+      com "secretsmanager get-secret-value --secret-id <id>".
+    Value: !Sub 'viajajunto/${Ambiente}/jwt,viajajunto/${Ambiente}/recuperacao'
+
+  CaminhoParametros:
+    Description: Valor para CONFIG_AWS_PARAMETROS.
+    Value: !Sub '/viajajunto/${Ambiente}/'
+
+  GrupoLogs:
+    Description: Grupo de logs da API.
+    Value: !Ref GrupoLogsApi

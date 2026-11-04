@@ -1,5 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { CategoriaDestino } from '@prisma/client';
+import { Transform, TransformFnParams } from 'class-transformer';
 import {
   IsEnum,
   IsLatitude,
@@ -10,44 +11,88 @@ import {
   IsUrl,
   MaxLength,
 } from 'class-validator';
+import { OpcionalNaoNulo } from '../../../common/validacao/opcional';
 
-/** RF09 - cada destino do catalogo representa uma cidade. */
+const aparar = ({ value }: TransformFnParams): unknown =>
+  typeof value === 'string' ? value.trim() : value;
+
+/** Texto opcional: em branco vira null. */
+const apararOuNulo = ({ value }: TransformFnParams): unknown =>
+  typeof value === 'string' ? value.trim() || null : value;
+
+/** Cada destino do catalogo representa uma cidade. */
 export class CriarDestinoCatalogoDto {
   @ApiProperty({ example: 'Porto', description: 'Nome da cidade' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(120)
+  @Transform(aparar)
+  @IsString({ message: 'O nome deve ser um texto' })
+  @IsNotEmpty({ message: 'O nome do destino nao pode ficar em branco' })
+  @MaxLength(120, { message: 'O nome deve ter no maximo 120 caracteres' })
   nome!: string;
 
-  @ApiPropertyOptional({ example: 'Portugal' })
-  @IsString()
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'Portugal' })
+  @Transform(apararOuNulo)
+  @IsString({ message: 'O pais deve ser um texto' })
+  @MaxLength(80, { message: 'O pais deve ter no maximo 80 caracteres' })
   @IsOptional()
-  @MaxLength(80)
-  pais?: string;
+  pais?: string | null;
 
-  @ApiPropertyOptional({ enum: CategoriaDestino, example: CategoriaDestino.CULTURAL })
-  @IsEnum(CategoriaDestino)
+  @ApiPropertyOptional({
+    enum: CategoriaDestino,
+    enumName: 'CategoriaDestino',
+    nullable: true,
+    example: CategoriaDestino.CULTURAL,
+  })
+  @IsEnum(CategoriaDestino, {
+    message: `Categoria invalida: use ${Object.values(CategoriaDestino).join(', ')}`,
+  })
   @IsOptional()
-  categoria?: CategoriaDestino;
+  categoria?: CategoriaDestino | null;
 
-  @ApiPropertyOptional({ example: 'Cidade historica as margens do Rio Douro.' })
-  @IsString()
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Cidade historica as margens do Rio Douro.',
+  })
+  @Transform(apararOuNulo)
+  @IsString({ message: 'A descricao deve ser um texto' })
+  @MaxLength(2000, { message: 'A descricao deve ter no maximo 2000 caracteres' })
   @IsOptional()
-  descricao?: string;
+  descricao?: string | null;
 
-  @ApiPropertyOptional({ example: 41.1579 })
-  @IsLatitude()
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 41.1579 })
+  @IsLatitude({ message: 'Informe uma latitude valida (entre -90 e 90)' })
   @IsOptional()
-  latitude?: number;
+  latitude?: number | null;
 
-  @ApiPropertyOptional({ example: -8.6291 })
-  @IsLongitude()
+  @ApiPropertyOptional({ type: Number, nullable: true, example: -8.6291 })
+  @IsLongitude({ message: 'Informe uma longitude valida (entre -180 e 180)' })
   @IsOptional()
-  longitude?: number;
+  longitude?: number | null;
 
-  @ApiPropertyOptional({ example: 'https://exemplo.com/porto.jpg' })
-  @IsUrl()
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'http://localhost:4566/viajajunto-local-midia/publico/destinos/3f1c.jpg',
+    description: 'URL da foto; use a `urlPublica` devolvida por POST /uploads',
+  })
+  @IsUrl(
+    { require_tld: false, protocols: ['http', 'https'], require_protocol: true },
+    { message: 'Informe uma URL valida para a foto' },
+  )
+  @MaxLength(500, { message: 'A URL da foto deve ter no maximo 500 caracteres' })
   @IsOptional()
-  @MaxLength(500)
-  fotoUrl?: string;
+  fotoUrl?: string | null;
+}
+
+/** Edicao do item do catalogo: envie so o que muda; `null` apaga um campo opcional. */
+export class AtualizarDestinoCatalogoDto extends PartialType(
+  OmitType(CriarDestinoCatalogoDto, ['nome'] as const),
+) {
+  @ApiPropertyOptional({ example: 'Porto' })
+  @Transform(aparar)
+  @OpcionalNaoNulo()
+  @IsString({ message: 'O nome deve ser um texto' })
+  @IsNotEmpty({ message: 'O nome do destino nao pode ficar em branco' })
+  @MaxLength(120, { message: 'O nome deve ter no maximo 120 caracteres' })
+  nome?: string;
 }

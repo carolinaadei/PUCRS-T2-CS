@@ -1,3 +1,6 @@
 .DS_Store
 site/
 __pycache__/
+
+# Variaveis do docker compose (portas, Brevo) - nunca versionar
+.env

@@ -1,179 +1,124 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Notificacao, Prisma, TipoNotificacao } from '@prisma/client';
 import { RespostaPaginada } from '../../common/dto/paginacao.dto';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { naoEncontrado } from '../../common/erros/erros';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BuscarNotificacoesDto } from './dto/buscar-notificacoes.dto';
-import { NotificacaoDto } from './dto/notificacao.dto';
+import { ContagemNotificacoesDto, NotificacaoDto } from './dto/notificacao.dto';
 
-export enum TipoNotificacao {
-  VIAGEM_ATUALIZADA = 'VIAGEM_ATUALIZADA',
-  DESTINO_ADICIONADO = 'DESTINO_ADICIONADO',
-  DESTINO_ATUALIZADO = 'DESTINO_ATUALIZADO',
-  DESTINO_REMOVIDO = 'DESTINO_REMOVIDO',
-  ATIVIDADE_ADICIONADA = 'ATIVIDADE_ADICIONADA',
-  ATIVIDADE_ATUALIZADA = 'ATIVIDADE_ATUALIZADA',
-  ATIVIDADE_REMOVIDA = 'ATIVIDADE_REMOVIDA',
-  ORCAMENTO_ATUALIZADO = 'ORCAMENTO_ATUALIZADO',
-  ORCAMENTO_REMOVIDO = 'ORCAMENTO_REMOVIDO',
-  MEMBRO_ENTROU = 'MEMBRO_ENTROU',
-  PERMISSAO_ALTERADA = 'PERMISSAO_ALTERADA',
-  MEMBRO_REMOVIDO = 'MEMBRO_REMOVIDO',
-  MEMBRO_SAIU = 'MEMBRO_SAIU',
-}
-
-interface RegistroNotificacao extends NotificacaoDto {
-  usuarioId: number;
-}
-
-export interface DadosNovaNotificacao {
+export interface EventoViagem {
   viagemId: string;
-  tipo: string;
-  mensagem: string;
+  /** Quem fez a alteracao: nunca e notificado sobre o que ele mesmo fez. */
+  autorId: number;
+  tipo: TipoNotificacao;
+  /** Recebe o nome atual da viagem e devolve o texto da notificacao. */
+  mensagem: (nomeViagem: string) => string;
+  /** Sem esta lista, todos os participantes (criador e colaboradores) sao avisados. */
+  destinatarios?: number[];
 }
 
-export interface EventoAlteracaoViagem extends DadosNovaNotificacao {
-  autorId?: number;
-  destinatariosExtras?: number[];
-}
+export const paraNotificacaoDto = (notificacao: Notificacao): NotificacaoDto => ({
+  id: notificacao.id,
+  viagemId: notificacao.viagemId,
+  tipo: notificacao.tipo,
+  mensagem: notificacao.mensagem,
+  lida: notificacao.lidaEm !== null,
+  lidaEm: notificacao.lidaEm,
+  criadaEm: notificacao.criadaEm,
+});
 
+/**
+ * Notificacoes in-app, persistidas por destinatario.
+ *
+ * Quem altera uma viagem chama `registrar` com o mesmo cliente de transacao da
+ * alteracao: ou as duas coisas sao gravadas, ou nenhuma. Nao ha aviso perdido
+ * num restart nem aviso de algo que acabou nao acontecendo.
+ */
 @Injectable()
 export class NotificacoesService {
-  private readonly registros: RegistroNotificacao[] = [];
-  private proximoId = 1;
-
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Lista as notificacoes do usuario, mais recentes primeiro, com filtro opcional de nao lidas. */
-  listarDoUsuario(
-    usuarioId: number,
-    filtro: BuscarNotificacoesDto = new BuscarNotificacoesDto(),
-  ): RespostaPaginada<NotificacaoDto> {
-    const filtradas = this.registros
-      .filter(
-        (item) =>
-          item.usuarioId === usuarioId && (filtro.apenasNaoLidas === true ? !item.lida : true),
-      )
-      .sort((a, b) => b.criadaEm.getTime() - a.criadaEm.getTime() || b.id - a.id);
+  async registrar(tx: Prisma.TransactionClient, evento: EventoViagem): Promise<number> {
+    const viagem = await tx.viagem.findUnique({
+      where: { id: evento.viagemId },
+      select: { nome: true, criadoPor: true, membros: { select: { usuarioId: true } } },
+    });
 
-    const total = filtradas.length;
-    const itens = filtradas
-      .slice(filtro.pular, filtro.pular + filtro.limite)
-      .map((item) => this.paraDto(item));
-
-    return new RespostaPaginada(itens, total, filtro);
-  }
-
-  /** Marca como lidas todas as notificacoes do usuario autenticado. */
-  marcarTodasComoLidas(usuarioId: number): void {
-    for (const item of this.registros) {
-      if (item.usuarioId === usuarioId) {
-        item.lida = true;
-      }
-    }
-  }
-
-  /** Marca uma notificacao especifica como lida; exige que pertenca ao destinatario. */
-  marcarComoLida(usuarioId: number, notificacaoId: number): NotificacaoDto {
-    const registro = this.registros.find(
-      (item) => item.id === notificacaoId && item.usuarioId === usuarioId,
-    );
-
-    if (!registro) {
-      throw new NotFoundException('Notificacao nao encontrada');
+    if (!viagem) {
+      return 0;
     }
 
-    registro.lida = true;
-    return this.paraDto(registro);
-  }
+    const candidatos = evento.destinatarios ?? [
+      viagem.criadoPor,
+      ...viagem.membros.map((membro) => membro.usuarioId),
+    ];
+    const destinatarios = [...new Set(candidatos)].filter((id) => id !== evento.autorId);
 
-  /** Registra notificacoes diretamente para os destinatarios informados. */
-  registrarParaUsuarios(destinatariosIds: number[], dados: DadosNovaNotificacao): NotificacaoDto[] {
-    const unicos = Array.from(new Set(destinatariosIds));
-    const criadas: NotificacaoDto[] = [];
+    if (destinatarios.length === 0) {
+      return 0;
+    }
 
-    for (const usuarioId of unicos) {
-      const registro: RegistroNotificacao = {
-        id: this.proximoId++,
+    const mensagem = evento.mensagem(viagem.nome);
+    const { count } = await tx.notificacao.createMany({
+      data: destinatarios.map((usuarioId) => ({
         usuarioId,
-        viagemId: dados.viagemId,
-        tipo: dados.tipo,
-        mensagem: dados.mensagem,
-        lida: false,
-        criadaEm: new Date(),
-      };
-      this.registros.push(registro);
-      criadas.push(this.paraDto(registro));
-    }
-
-    return criadas;
-  }
-
-  /**
-   * Notifica todos os participantes da viagem (colaboradores e criador),
-   * exceto o proprio autor da alteracao.
-   */
-  async notificarAlteracaoViagem(evento: EventoAlteracaoViagem): Promise<NotificacaoDto[]> {
-    const participantes = await this.buscarParticipantesDaViagem(evento.viagemId);
-    const todos = new Set<number>([...participantes, ...(evento.destinatariosExtras ?? [])]);
-
-    if (typeof evento.autorId === 'number') {
-      todos.add(evento.autorId);
-    }
-
-    if (todos.size === 0) {
-      return [];
-    }
-
-    return this.registrarParaUsuarios(Array.from(todos), {
-      viagemId: evento.viagemId,
-      tipo: evento.tipo,
-      mensagem: evento.mensagem,
-    });
-  }
-
-  /** Limpa o estado em memoria (util em testes). */
-  limpar(): void {
-    this.registros.length = 0;
-    this.proximoId = 1;
-  }
-
-  private async buscarParticipantesDaViagem(viagemId: string): Promise<number[]> {
-    if (typeof this.prisma.membroViagem?.findMany !== 'function') {
-      return [];
-    }
-
-    const vinculos = await this.prisma.membroViagem.findMany({
-      where: { viagemId },
-      select: {
-        usuarioId: true,
-        viagem: { select: { criadoPor: true } },
-      },
+        viagemId: evento.viagemId,
+        tipo: evento.tipo,
+        mensagem,
+      })),
     });
 
-    if (!Array.isArray(vinculos) || vinculos.length === 0) {
-      return [];
-    }
-
-    const ids = new Set<number>();
-    for (const vinculo of vinculos) {
-      if (typeof vinculo.usuarioId === 'number') {
-        ids.add(vinculo.usuarioId);
-      }
-      if (typeof vinculo.viagem?.criadoPor === 'number') {
-        ids.add(vinculo.viagem.criadoPor);
-      }
-    }
-
-    return Array.from(ids);
+    return count;
   }
 
-  private paraDto(registro: RegistroNotificacao): NotificacaoDto {
-    return {
-      id: registro.id,
-      viagemId: registro.viagemId,
-      tipo: registro.tipo,
-      mensagem: registro.mensagem,
-      lida: registro.lida,
-      criadaEm: registro.criadaEm,
+  async listarDoUsuario(usuarioId: number, filtro: BuscarNotificacoesDto) {
+    const where: Prisma.NotificacaoWhereInput = {
+      usuarioId,
+      ...(filtro.apenasNaoLidas === true && { lidaEm: null }),
     };
+
+    const [itens, total] = await this.prisma.$transaction([
+      this.prisma.notificacao.findMany({
+        where,
+        orderBy: [{ criadaEm: 'desc' }, { id: 'desc' }],
+        skip: filtro.pular,
+        take: filtro.limite,
+      }),
+      this.prisma.notificacao.count({ where }),
+    ]);
+
+    return new RespostaPaginada(itens.map(paraNotificacaoDto), total, filtro);
+  }
+
+  async contar(usuarioId: number): Promise<ContagemNotificacoesDto> {
+    const naoLidas = await this.prisma.notificacao.count({ where: { usuarioId, lidaEm: null } });
+    return { naoLidas };
+  }
+
+  /** Marca (ou desmarca) uma notificacao do proprio usuario. */
+  async marcar(usuarioId: number, notificacaoId: number, lida: boolean): Promise<NotificacaoDto> {
+    const { count } = await this.prisma.notificacao.updateMany({
+      where: { id: notificacaoId, usuarioId },
+      data: { lidaEm: lida ? new Date() : null },
+    });
+
+    if (count === 0) {
+      throw naoEncontrado(CodigoErro.NOTIFICACAO_NAO_ENCONTRADA, 'Notificacao nao encontrada');
+    }
+
+    const notificacao = await this.prisma.notificacao.findUniqueOrThrow({
+      where: { id: notificacaoId },
+    });
+    return paraNotificacaoDto(notificacao);
+  }
+
+  async marcarTodasComoLidas(usuarioId: number): Promise<{ atualizadas: number }> {
+    const { count } = await this.prisma.notificacao.updateMany({
+      where: { usuarioId, lidaEm: null },
+      data: { lidaEm: new Date() },
+    });
+
+    return { atualizadas: count };
   }
 }

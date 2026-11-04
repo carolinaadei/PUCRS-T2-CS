@@ -1,0 +1,158 @@
+# ViajaJunto - ambiente completo com um comando:
+#
+#   docker compose up -d --build --wait
+#
+# Sobe, nesta ordem:
+#   1. postgres     banco da API
+#   2. ministack    emulador dos servicos da AWS (https://ministack.org)
+#   3. provisionar  aplica infra/cloudformation/viajajunto.yaml no MiniStack
+#   4. migrar       migrations + seed (idempotente)
+#   5. api          http://localhost:3000/api/v1  (Swagger em /api/docs)
+#   6. worker       entrega os e-mails da fila SQS pelo SES
+#
+# A API nao conhece nome de bucket, fila ou segredo: le tudo o que a pilha
+# CloudFormation criou (Secrets Manager + SSM Parameter Store) no boot. Na AWS de
+# verdade o mesmo modelo e a mesma imagem funcionam - basta nao definir
+# AWS_ENDPOINT_URL e S3_ENDPOINT_PUBLICO.
+#
+# Para isolar copias do repositorio (worktrees), defina COMPOSE_PROJECT_NAME e
+# portas diferentes num `.env` na raiz.
+name: ${COMPOSE_PROJECT_NAME:-viajajunto}
+
+# Credenciais e endpoint do MiniStack, compartilhados por quem fala com a "AWS".
+# O MiniStack nao valida credenciais, mas os SDKs se recusam a assinar sem elas.
+x-aws-local: &aws-local
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_ENDPOINT_URL: http://ministack:4566
+
+# Variaveis comuns a API e ao worker: so o banco e onde ler o resto.
+x-app: &app
+  <<: *aws-local
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-viajajunto}:${POSTGRES_PASSWORD:-viajajunto}@postgres:5432/${POSTGRES_DB:-viajajunto}?schema=public
+  CONFIG_AWS_SEGREDOS: viajajunto/local/jwt,viajajunto/local/recuperacao
+  CONFIG_AWS_PARAMETROS: /viajajunto/local/
+  # O navegador nao resolve "ministack": as fotos sao assinadas e servidas pelo
+  # endereco publicado no host.
+  S3_ENDPOINT_PUBLICO: http://localhost:${MINISTACK_PORT:-4566}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-viajajunto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viajajunto}
+      POSTGRES_DB: ${POSTGRES_DB:-viajajunto}
+    ports:
+      # Porta do host configuravel: util quando ja ha um Postgres local na 5432.
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-viajajunto}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ministack:
+    # Tag fixa, e nao "latest": o ambiente nao muda sozinho quando sai versao nova.
+    image: ministackorg/ministack:1.5.37
+    restart: unless-stopped
+    environment:
+      # Estado em disco: a pilha, os segredos gerados e as fotos sobrevivem a
+      # um restart. Sem isto o segredo do JWT mudaria a cada boot e derrubaria
+      # todas as sessoes.
+      PERSIST_STATE: '1'
+      S3_PERSIST: '1'
+    ports:
+      - '${MINISTACK_PORT:-4566}:4566'
+    volumes:
+      - ministack_estado:/tmp/ministack-state
+      - ministack_s3:/tmp/ministack-data/s3
+    # A imagem traz HEALTHCHECK proprio (/_ministack/health).
+
+  provisionar:
+    image: amazon/aws-cli:2.39.3
+    depends_on:
+      ministack:
+        condition: service_healthy
+    environment:
+      <<: *aws-local
+      AWS_PAGER: ''
+    volumes:
+      - ./infra/cloudformation:/infra:ro
+    # `deploy` cria a pilha na primeira vez e, nas seguintes, aplica so o que
+    # mudou no modelo (via change set) - ou nada, sem erro.
+    command:
+      - cloudformation
+      - deploy
+      - --stack-name
+      - viajajunto-local
+      - --template-file
+      - /infra/viajajunto.yaml
+      - --no-fail-on-empty-changeset
+      - --parameter-overrides
+      - Ambiente=local
+      - OrigensFrontend=${CORS_ORIGINS:-http://localhost:3001,http://localhost:5173,http://localhost:4200}
+      - UrlPublicaApi=http://localhost:${API_PORT:-3000}
+
+  migrar:
+    build:
+      context: ./backend
+      target: ferramentas
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-viajajunto}:${POSTGRES_PASSWORD:-viajajunto}@postgres:5432/${POSTGRES_DB:-viajajunto}?schema=public
+
+  api:
+    build:
+      context: ./backend
+    image: viajajunto-backend:local
+    restart: unless-stopped
+    depends_on:
+      provisionar:
+        condition: service_completed_successfully
+      migrar:
+        condition: service_completed_successfully
+    environment:
+      <<: *app
+      PORT: 3000
+    ports:
+      - '${API_PORT:-3000}:3000'
+
+  worker:
+    # Mesma imagem da API (o segundo build sai inteiro do cache), outro comando.
+    build:
+      context: ./backend
+    image: viajajunto-backend:local
+    restart: unless-stopped
+    command: ['node', 'dist/worker']
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      <<: *app
+    # O HEALTHCHECK da imagem bate na porta HTTP, que o worker nao abre. Aqui o
+    # sinal de vida e o arquivo que o loop da fila toca a cada ciclo (<= 10 s).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const f=require('path').join(require('os').tmpdir(),'viajajunto-worker-vivo');process.exit(Date.now()-require('fs').statSync(f).mtimeMs<60000?0:1)"
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    # O long polling da fila dura ate 10 s; o worker termina o ciclo antes de sair.
+    stop_grace_period: 15s
+
+volumes:
+  postgres_data:
+  ministack_estado:
+  ministack_s3:

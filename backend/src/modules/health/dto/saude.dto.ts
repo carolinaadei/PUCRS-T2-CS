@@ -1,8 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class SaudeDto {
-  @ApiProperty({ enum: ['ok', 'degradado'], example: 'ok' })
-  status!: 'ok' | 'degradado';
+export class VivoDto {
+  @ApiProperty({ enum: ['ok'], example: 'ok' })
+  status!: 'ok';
+
+  @ApiProperty({ example: 3605.2, description: 'Segundos desde que o processo subiu' })
+  uptime!: number;
+}
+
+export class ProntoDto {
+  @ApiProperty({ enum: ['ok', 'indisponivel'], example: 'ok' })
+  status!: 'ok' | 'indisponivel';
 
   @ApiProperty({ enum: ['ok', 'indisponivel'], example: 'ok' })
   banco!: 'ok' | 'indisponivel';

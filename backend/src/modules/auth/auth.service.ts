@@ -1,36 +1,40 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { conflito, naoAutenticado, requisicaoInvalida } from '../../common/erros/erros';
 import { PayloadJwt } from '../../common/types/usuario-autenticado';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { RegistrarDto } from './dto/registrar.dto';
 import { RespostaAutenticacaoDto } from './dto/resposta-autenticacao.dto';
-import { RespostaLogoutDto } from './dto/resposta-logout.dto';
 import { RespostaVerificacaoDto } from './dto/resposta-verificacao.dto';
 
-/** RF03 - janela de validade do codigo de 6 digitos enviado por e-mail. */
+/** Validade do codigo de 6 digitos enviado por e-mail. */
 const MINUTOS_VALIDADE_CODIGO = 15;
 
-/** RF03 - janela para concluir a troca depois que o codigo conferiu. */
+/** Janela para concluir a troca depois que o codigo conferiu. */
 const MINUTOS_VALIDADE_TROCA = 10;
 
 /**
- * RF03 - codigos errados aceitos antes de queimar o registro.
- * Sem isto, 10^6 combinacoes sao poucas para quem consegue trocar de IP e
- * escapar do ThrottlerGuard.
+ * Codigos errados aceitos antes de queimar o registro. Sem isto, 10^6
+ * combinacoes sao poucas para quem consegue trocar de IP e escapar do
+ * ThrottlerGuard.
  */
 const MAX_TENTATIVAS = 5;
+
+/** Sessoes revogadas ficam guardadas este tempo para detectar reuso do refresh token. */
+const DIAS_GUARDANDO_REVOGADAS = 7;
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+type UsuarioDaSessao = { id: number; nome: string; email: string; versaoSessao: number };
+
+const sha256 = (valor: string) => createHash('sha256').update(valor).digest('hex');
 
 @Injectable()
 export class AuthService {
@@ -46,58 +50,57 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
-  /** RF01 - cria a conta com a senha armazenada em hash (RNF03). */
-  async registrar(dto: RegistrarDto): Promise<RespostaAutenticacaoDto> {
-    const emailNormalizado = dto.email.trim().toLowerCase();
+  // --------------------------- Conta e login ---------------------------
 
-    const jaExiste = await this.prisma.usuario.findUnique({
-      where: { email: emailNormalizado },
+  /** Cria a conta com a senha armazenada em hash e ja abre uma sessao. */
+  async registrar(dto: RegistrarDto): Promise<RespostaAutenticacaoDto> {
+    const email = dto.email.trim().toLowerCase();
+    const jaCadastrado = conflito(
+      CodigoErro.EMAIL_JA_CADASTRADO,
+      'Ja existe uma conta com este e-mail',
+    );
+
+    const existente = await this.prisma.usuario.findUnique({
+      where: { email },
       select: { id: true },
     });
 
-    if (jaExiste) {
-      throw new ConflictException('Ja existe uma conta com este e-mail');
+    if (existente) {
+      throw jaCadastrado;
     }
 
-    const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
-    const senhaHash = await bcrypt.hash(dto.senha, saltRounds);
+    const senhaHash = await this.gerarHash(dto.senha);
 
     try {
       const usuario = await this.prisma.usuario.create({
-        data: { nome: dto.nome.trim(), email: emailNormalizado, senhaHash },
+        data: { nome: dto.nome.trim(), email, senhaHash },
         select: { id: true, nome: true, email: true, versaoSessao: true },
       });
 
-      return {
-        accessToken: this.gerarToken(usuario),
-        usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
-      };
+      return await this.abrirSessao(usuario);
     } catch (erro) {
       // A checagem acima resolve o caso comum; o indice unico resolve a corrida
       // entre dois cadastros simultaneos com o mesmo e-mail.
       if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-        throw new ConflictException('Ja existe uma conta com este e-mail');
+        throw jaCadastrado;
       }
 
       throw erro;
     }
   }
 
-  /**
-   * RF02 - Autentica o usuario validando e-mail e hash da senha (RNF03).
-   * @param dto Credenciais contendo e-mail e senha.
-   * @throws UnauthorizedException Se o e-mail ou senha forem invalidos.
-   * @returns Token JWT de acesso e dados publicos do usuario.
-   */
+  /** Confere e-mail e senha e abre uma sessao nova. */
   async login(dto: LoginDto): Promise<RespostaAutenticacaoDto> {
-    const emailNormalizado = dto.email.trim().toLowerCase();
-
     const usuario = await this.prisma.usuario.findUnique({
-      where: { email: emailNormalizado },
+      where: { email: dto.email.trim().toLowerCase() },
+      select: { id: true, nome: true, email: true, versaoSessao: true, senhaHash: true },
     });
 
     // Mensagem generica de proposito: nao revela se o e-mail existe.
-    const credenciaisInvalidas = new UnauthorizedException('E-mail ou senha invalidos');
+    const credenciaisInvalidas = naoAutenticado(
+      CodigoErro.CREDENCIAIS_INVALIDAS,
+      'E-mail ou senha invalidos',
+    );
 
     if (!usuario) {
       // Roda o bcrypt mesmo assim: sem ele, o e-mail desconhecido responderia
@@ -106,39 +109,140 @@ export class AuthService {
       throw credenciaisInvalidas;
     }
 
-    const senhaConfere = await bcrypt.compare(dto.senha, usuario.senhaHash);
-
-    if (!senhaConfere) {
+    if (!(await bcrypt.compare(dto.senha, usuario.senhaHash))) {
       throw credenciaisInvalidas;
     }
 
-    return {
-      accessToken: this.gerarToken(usuario),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
-    };
+    return this.abrirSessao(usuario);
+  }
+
+  // ------------------------------ Sessoes ------------------------------
+
+  /**
+   * Troca um refresh token por um par novo (rotacao). O token apresentado deixa
+   * de valer na hora. Se ele ja tinha sido trocado antes, alguem esta usando uma
+   * copia - roubada ou vazada -, e todas as sessoes do usuario sao encerradas.
+   */
+  async renovar(refreshToken: string): Promise<RespostaAutenticacaoDto> {
+    const invalido = naoAutenticado(
+      CodigoErro.REFRESH_TOKEN_INVALIDO,
+      'Sessao invalida ou expirada; faca login novamente',
+    );
+
+    const sessao = await this.prisma.sessaoRefresh.findUnique({
+      where: { tokenHash: sha256(refreshToken) },
+      select: {
+        id: true,
+        expiraEm: true,
+        revogadaEm: true,
+        usuario: { select: { id: true, nome: true, email: true, versaoSessao: true } },
+      },
+    });
+
+    if (!sessao) {
+      throw invalido;
+    }
+
+    if (sessao.revogadaEm) {
+      this.logger.warn(`Refresh token reutilizado pelo usuario ${sessao.usuario.id}`);
+      await this.encerrarTodasAsSessoes(sessao.usuario.id);
+      throw invalido;
+    }
+
+    if (sessao.expiraEm <= new Date()) {
+      throw invalido;
+    }
+
+    // Condicional: entre duas renovacoes simultaneas com o mesmo token, so uma
+    // encontra a sessao ainda aberta.
+    const { count } = await this.prisma.sessaoRefresh.updateMany({
+      where: { id: sessao.id, revogadaEm: null },
+      data: { revogadaEm: new Date() },
+    });
+
+    if (count === 0) {
+      throw invalido;
+    }
+
+    return this.abrirSessao(sessao.usuario);
   }
 
   /**
-   * RF02 - encerra as sessoes do usuario, invalidando os JWTs ja emitidos.
-   * Incrementar `versaoSessao` faz a JwtStrategy recusar qualquer token assinado
-   * antes desta chamada, inclusive um que tenha sido roubado. Sem isso o logout
-   * seria apenas uma mensagem: o token continuaria valido ate expirar.
+   * Encerra apenas a sessao do refresh token informado. Idempotente.
+   *
+   * A sessao e apagada, e nao marcada como revogada: so tokens trocados na
+   * rotacao ficam guardados para detectar reuso. Um token de logout apresentado
+   * depois (um front que tenta renovar apos sair) e so invalido, e nao derruba
+   * as outras sessoes do usuario.
    */
-  async logout(usuarioId: number): Promise<RespostaLogoutDto> {
-    await this.prisma.usuario.update({
+  async logout(usuarioId: number, refreshToken: string): Promise<void> {
+    await this.prisma.sessaoRefresh.deleteMany({
+      where: { usuarioId, tokenHash: sha256(refreshToken) },
+    });
+  }
+
+  /**
+   * Encerra todas as sessoes: apaga os refresh tokens e incrementa a versao de
+   * sessao, o que faz a JwtStrategy recusar os access tokens ja emitidos.
+   */
+  async encerrarTodasAsSessoes(
+    usuarioId: number,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    await tx.sessaoRefresh.deleteMany({ where: { usuarioId } });
+    await tx.usuario.update({
       where: { id: usuarioId },
       data: { versaoSessao: { increment: 1 } },
     });
-
-    return { mensagem: 'Logout realizado com sucesso' };
   }
 
   /**
-   * RF03 - etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
+   * Troca a senha de quem esta logado. As demais sessoes sao encerradas e uma
+   * nova e aberta, para o dispositivo atual continuar logado.
+   */
+  async trocarSenha(
+    usuarioId: number,
+    senhaAtual: string,
+    novaSenha: string,
+    confirmacao: string,
+  ): Promise<RespostaAutenticacaoDto> {
+    this.conferirConfirmacao(novaSenha, confirmacao);
+    await this.conferirSenha(usuarioId, senhaAtual);
+
+    const senhaHash = await this.gerarHash(novaSenha);
+
+    const usuario = await this.prisma.$transaction(async (tx) => {
+      await this.encerrarTodasAsSessoes(usuarioId, tx);
+      return tx.usuario.update({
+        where: { id: usuarioId },
+        data: { senhaHash },
+        select: { id: true, nome: true, email: true, versaoSessao: true },
+      });
+    });
+
+    return this.abrirSessao(usuario);
+  }
+
+  /** Lanca SENHA_ATUAL_INCORRETA se a senha nao for a do usuario. */
+  async conferirSenha(usuarioId: number, senha: string): Promise<void> {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { senhaHash: true },
+    });
+
+    if (!usuario || !(await bcrypt.compare(senha, usuario.senhaHash))) {
+      throw requisicaoInvalida(CodigoErro.SENHA_ATUAL_INCORRETA, 'A senha informada nao confere');
+    }
+  }
+
+  // ------------------------ Recuperacao de senha -----------------------
+
+  /**
+   * Etapa 1: gera o codigo de 6 digitos e o envia por e-mail.
    * Nunca revela se o e-mail existe: a resposta ao cliente e sempre a mesma, e
    * chega no mesmo tempo, porque o trabalho roda sem ser esperado. Se fosse
-   * esperado, o e-mail cadastrado demoraria centenas de ms a mais (gravacao no
-   * banco + chamada ao Brevo) e o tempo de resposta entregaria quem tem conta.
+   * esperado, o e-mail cadastrado demoraria mais (gravacao no banco + envio) e
+   * o tempo de resposta entregaria quem tem conta.
    */
   solicitarRecuperacaoSenha(email: string): void {
     void this.enviarCodigoRecuperacao(email).catch((erro: unknown) =>
@@ -147,10 +251,8 @@ export class AuthService {
   }
 
   private async enviarCodigoRecuperacao(email: string): Promise<void> {
-    const emailNormalizado = email.trim().toLowerCase();
-
     const usuario = await this.prisma.usuario.findUnique({
-      where: { email: emailNormalizado },
+      where: { email: email.trim().toLowerCase() },
       select: { id: true, nome: true, email: true },
     });
 
@@ -158,7 +260,7 @@ export class AuthService {
       return;
     }
 
-    const codigo = this.gerarCodigo();
+    const codigo = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const expiraEm = new Date(Date.now() + MINUTOS_VALIDADE_CODIGO * 60 * 1000);
 
     // Invalida codigos anteriores ainda pendentes: apenas o ultimo vale.
@@ -172,34 +274,35 @@ export class AuthService {
       }),
     ]);
 
-    // Atalho de desenvolvimento: o main.ts desliga o nivel `debug` em producao.
+    // Atalho de desenvolvimento: em producao o nivel `debug` fica desligado.
     this.logger.debug(`Codigo de recuperacao para ${usuario.email}: ${codigo}`);
 
     try {
-      await this.mailService.enviarEmail(
-        { email: usuario.email, nome: usuario.nome },
-        'Seu codigo de recuperacao - ViajaJunto',
-        this.montarEmailCodigo(codigo),
-      );
+      await this.mailService.enviar({
+        para: { email: usuario.email, nome: usuario.nome },
+        assunto: 'Seu codigo de recuperacao - ViajaJunto',
+        html: this.montarEmailCodigo(codigo),
+        texto:
+          `Seu codigo para redefinir a senha no ViajaJunto: ${codigo}\n` +
+          `Ele expira em ${MINUTOS_VALIDADE_CODIGO} minutos e vale uma unica vez.`,
+      });
     } catch (erro) {
       // O codigo ja esta persistido e continua valido; falha de envio nao vaza para o cliente.
       this.logger.error(`Falha ao enviar e-mail de recuperacao: ${String(erro)}`);
     }
   }
 
-  /**
-   * RF03 - etapa 2: confere o codigo e emite o token que autoriza a troca.
-   * A senha ainda nao muda aqui.
-   */
+  /** Etapa 2: confere o codigo e emite o token que autoriza a troca. */
   async verificarCodigo(email: string, codigo: string): Promise<RespostaVerificacaoDto> {
-    const emailNormalizado = email.trim().toLowerCase();
-
     // Mensagem unica para e-mail desconhecido, codigo errado, expirado ou queimado:
     // responder diferente entregaria quais e-mails existem.
-    const codigoInvalido = new BadRequestException('Codigo invalido ou expirado');
+    const codigoInvalido = requisicaoInvalida(
+      CodigoErro.CODIGO_RECUPERACAO_INVALIDO,
+      'Codigo invalido ou expirado',
+    );
 
     const usuario = await this.prisma.usuario.findUnique({
-      where: { email: emailNormalizado },
+      where: { email: email.trim().toLowerCase() },
       select: { id: true },
     });
 
@@ -207,8 +310,6 @@ export class AuthService {
       throw codigoInvalido;
     }
 
-    // Codigo de uso unico: registros queimados (`usadoEm`) ou ja verificados
-    // (`verificadoEm`) ficam de fora da busca.
     const registro = await this.prisma.tokenRecuperacaoSenha.findFirst({
       where: { usuarioId: usuario.id, usadoEm: null, verificadoEm: null },
       orderBy: { criadoEm: 'desc' },
@@ -220,8 +321,7 @@ export class AuthService {
 
     // Reserva a tentativa ANTES de conferir o codigo, num UPDATE condicional: o
     // banco serializa o incremento, entao no maximo MAX_TENTATIVAS requisicoes
-    // chegam a comparacao, mesmo disparadas em paralelo. Ler o contador, somar
-    // em memoria e gravar depois deixaria uma rajada inteira gastar uma so.
+    // chegam a comparacao, mesmo disparadas em paralelo.
     const reserva = await this.prisma.tokenRecuperacaoSenha.updateMany({
       where: {
         id: registro.id,
@@ -238,7 +338,6 @@ export class AuthService {
 
     if (!this.codigoConfere(codigo, registro.codigoHash)) {
       // Esgotou o teto: queima o codigo em vez de deixar continuar adivinhando.
-      // `verificadoEm: null` preserva uma troca que outra requisicao ja liberou.
       await this.prisma.tokenRecuperacaoSenha.updateMany({
         where: {
           id: registro.id,
@@ -255,15 +354,9 @@ export class AuthService {
     const tokenTroca = randomBytes(32).toString('base64url');
     const trocaExpiraEm = new Date(Date.now() + MINUTOS_VALIDADE_TROCA * 60 * 1000);
 
-    // Condicional pelo mesmo motivo: duas verificacoes simultaneas do codigo
-    // certo passam pela leitura acima, mas so uma encontra `verificadoEm` nulo.
     const emitido = await this.prisma.tokenRecuperacaoSenha.updateMany({
       where: { id: registro.id, usadoEm: null, verificadoEm: null },
-      data: {
-        verificadoEm: new Date(),
-        trocaHash: this.hashToken(tokenTroca),
-        trocaExpiraEm,
-      },
+      data: { verificadoEm: new Date(), trocaHash: sha256(tokenTroca), trocaExpiraEm },
     });
 
     if (emitido.count === 0) {
@@ -273,26 +366,26 @@ export class AuthService {
     return { tokenTroca, expiraEm: trocaExpiraEm.toISOString() };
   }
 
-  /** RF03 - etapa 3: troca a senha, autorizada pelo token emitido na etapa 2. */
+  /** Etapa 3: troca a senha e encerra todas as sessoes abertas. */
   async redefinirSenha(
     tokenTroca: string,
     novaSenha: string,
     confirmarNovaSenha: string,
   ): Promise<void> {
-    if (novaSenha !== confirmarNovaSenha) {
-      throw new BadRequestException('A confirmacao nao confere com a nova senha');
-    }
+    this.conferirConfirmacao(novaSenha, confirmarNovaSenha);
 
-    // Mensagem unica para token inexistente, ja usado ou expirado.
-    const sessaoInvalida = new BadRequestException('Sessao de redefinicao invalida ou expirada');
+    const sessaoInvalida = requisicaoInvalida(
+      CodigoErro.TOKEN_TROCA_INVALIDO,
+      'Sessao de redefinicao invalida ou expirada',
+    );
 
     const registro = await this.prisma.tokenRecuperacaoSenha.findUnique({
-      where: { trocaHash: this.hashToken(tokenTroca) },
+      where: { trocaHash: sha256(tokenTroca) },
       select: { id: true, usuarioId: true, trocaExpiraEm: true, usadoEm: true },
     });
 
     // Checagem previa: evita gastar bcrypt com token invalido. A garantia de
-    // uso unico nao esta aqui, e sim no UPDATE condicional da transacao.
+    // uso unico esta no UPDATE condicional da transacao.
     if (
       !registro ||
       registro.usadoEm ||
@@ -302,12 +395,9 @@ export class AuthService {
       throw sessaoInvalida;
     }
 
-    const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
-    const senhaHash = await bcrypt.hash(novaSenha, saltRounds);
+    const senhaHash = await this.gerarHash(novaSenha);
 
     await this.prisma.$transaction(async (tx) => {
-      // Consome o token so se ainda estiver livre e no prazo: entre duas
-      // requisicoes simultaneas com o mesmo token, apenas uma troca a senha.
       const consumido = await tx.tokenRecuperacaoSenha.updateMany({
         where: { id: registro.id, usadoEm: null, trocaExpiraEm: { gt: new Date() } },
         data: { usadoEm: new Date() },
@@ -317,18 +407,68 @@ export class AuthService {
         throw sessaoInvalida;
       }
 
-      // Incrementar a versao revoga os JWTs emitidos antes da troca: quem
-      // estava com um token roubado perde o acesso junto com a senha antiga.
-      await tx.usuario.update({
-        where: { id: registro.usuarioId },
-        data: { senhaHash, versaoSessao: { increment: 1 } },
-      });
+      // Quem estava com um token roubado perde o acesso junto com a senha antiga.
+      await this.encerrarTodasAsSessoes(registro.usuarioId, tx);
+      await tx.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } });
     });
   }
 
-  /** `randomInt` e uniforme e vem do CSPRNG; o padStart preserva zeros a esquerda. */
-  private gerarCodigo(): string {
-    return randomInt(0, 1_000_000).toString().padStart(6, '0');
+  // ------------------------------ Apoio ------------------------------
+
+  /**
+   * Emite o par de tokens. O `ver` do JWT prende o access token a versao de
+   * sessao vigente; o refresh token e opaco e so o hash dele vai para o banco.
+   */
+  private async abrirSessao(usuario: UsuarioDaSessao): Promise<RespostaAutenticacaoDto> {
+    const agora = Date.now();
+    const dias = this.configService.get<number>('jwt.diasRefresh')!;
+    const refreshToken = randomBytes(32).toString('base64url');
+    const refreshExpiraEm = new Date(agora + dias * DIA_MS);
+
+    // Aproveita para limpar o que nao serve mais nem para detectar reuso.
+    await this.prisma.sessaoRefresh.deleteMany({
+      where: {
+        usuarioId: usuario.id,
+        OR: [
+          { expiraEm: { lt: new Date(agora) } },
+          { revogadaEm: { lt: new Date(agora - DIAS_GUARDANDO_REVOGADAS * DIA_MS) } },
+        ],
+      },
+    });
+
+    await this.prisma.sessaoRefresh.create({
+      data: { usuarioId: usuario.id, tokenHash: sha256(refreshToken), expiraEm: refreshExpiraEm },
+    });
+
+    const payload: PayloadJwt = {
+      sub: usuario.id,
+      email: usuario.email,
+      ver: usuario.versaoSessao,
+    };
+    const accessToken = this.jwtService.sign(payload);
+    const { exp } = this.jwtService.decode<{ exp: number }>(accessToken);
+
+    return {
+      tipoToken: 'Bearer',
+      accessToken,
+      accessTokenExpiraEm: new Date(exp * 1000).toISOString(),
+      refreshToken,
+      refreshTokenExpiraEm: refreshExpiraEm.toISOString(),
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+    };
+  }
+
+  private conferirConfirmacao(novaSenha: string, confirmacao: string) {
+    if (novaSenha !== confirmacao) {
+      throw requisicaoInvalida(
+        CodigoErro.SENHAS_DIVERGENTES,
+        'A confirmacao nao confere com a nova senha',
+      );
+    }
+  }
+
+  private gerarHash(senha: string): Promise<string> {
+    return bcrypt.hash(senha, this.configService.get<number>('seguranca.saltRounds')!);
   }
 
   /**
@@ -339,11 +479,6 @@ export class AuthService {
   private hashCodigo(codigo: string): string {
     const segredo = this.configService.get<string>('seguranca.segredoRecuperacao')!;
     return createHmac('sha256', segredo).update(codigo).digest('hex');
-  }
-
-  /** O token de troca tem 256 bits de entropia, logo SHA-256 basta. */
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 
   /** Comparacao em tempo constante: o tempo de resposta nao entrega digitos certos. */
@@ -369,23 +504,7 @@ export class AuthService {
    * comparar quando o e-mail nao existe. Gerado uma vez, no primeiro uso.
    */
   private obterHashDescartavel(): Promise<string> {
-    const saltRounds = this.configService.get<number>('seguranca.saltRounds')!;
-    this.hashDescartavel ??= bcrypt.hash(randomBytes(16).toString('hex'), saltRounds);
+    this.hashDescartavel ??= this.gerarHash(randomBytes(16).toString('hex'));
     return this.hashDescartavel;
-  }
-
-  /**
-   * Gera o token de acesso assinado. O `ver` no payload prende o token a versao
-   * de sessao vigente: logout (RF02) e redefinicao de senha (RF03) incrementam a
-   * versao e derrubam tudo que foi assinado antes.
-   */
-  private gerarToken(usuario: { id: number; email: string; versaoSessao: number }): string {
-    const payload: PayloadJwt = {
-      sub: usuario.id,
-      email: usuario.email,
-      ver: usuario.versaoSessao,
-    };
-
-    return this.jwtService.sign(payload);
   }
 }
