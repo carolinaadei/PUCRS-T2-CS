@@ -113,7 +113,7 @@ describe('NotificacoesService e NotificacoesInterceptor', () => {
       expect(service.listarDoUsuario(3, filtroNaoLidas).total).toBe(1);
     });
 
-    it('notifica colaboradores e criador da viagem, excluindo o autor da acao', async () => {
+    it('notifica colaboradores, criador da viagem e autor da acao', async () => {
       prisma.membroViagem.findMany.mockResolvedValue([
         { usuarioId: 2, viagem: { criadoPor: 1 } },
         { usuarioId: 3, viagem: { criadoPor: 1 } },
@@ -126,18 +126,17 @@ describe('NotificacoesService e NotificacoesInterceptor', () => {
         mensagem: 'Atividade adicionada',
       });
 
-      expect(criadas).toHaveLength(2);
+      expect(criadas).toHaveLength(3);
       expect(service.listarDoUsuario(1).total).toBe(1);
+      expect(service.listarDoUsuario(2).total).toBe(1);
       expect(service.listarDoUsuario(3).total).toBe(1);
-      expect(service.listarDoUsuario(2).total).toBe(0);
     });
 
-    it('retorna lista vazia quando nao ha outros participantes para notificar', async () => {
+    it('retorna lista vazia quando nao ha participantes nem autor para notificar', async () => {
       prisma.membroViagem.findMany.mockResolvedValue([]);
 
       const criadas = await service.notificarAlteracaoViagem({
         viagemId: VIAGEM,
-        autorId: 1,
         tipo: TipoNotificacao.VIAGEM_ATUALIZADA,
         mensagem: 'Viagem atualizada',
       });
@@ -156,7 +155,7 @@ describe('NotificacoesService e NotificacoesInterceptor', () => {
         destinatariosExtras: [1],
       });
 
-      expect(criadas).toHaveLength(1);
+      expect(criadas).toHaveLength(2);
     });
 
     it('limpa os registros em memoria e reinicia a contagem de ids', () => {

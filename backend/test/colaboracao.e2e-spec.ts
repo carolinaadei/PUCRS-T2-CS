@@ -462,14 +462,15 @@ describe('Modulo 6 - Colaboracao e Notificacoes (e2e)', () => {
         lida: false,
       });
 
-      // O EDITOR recebeu apenas a notificacao do destino criado pelo CRIADOR (nao a propria edicao)
+      // O EDITOR tambem visualiza o historico das duas alteracoes na viagem
       const listaEditor = await http()
         .get('/api/notificacoes')
         .set(comoUsuario(EDITOR))
         .expect(200);
 
-      expect(listaEditor.body.total).toBe(1);
-      expect(listaEditor.body.itens[0].tipo).toBe('DESTINO_ADICIONADO');
+      expect(listaEditor.body.total).toBe(2);
+      expect(listaEditor.body.itens[0].tipo).toBe('VIAGEM_ATUALIZADA');
+      expect(listaEditor.body.itens[1].tipo).toBe('DESTINO_ADICIONADO');
     });
 
     it('marca notificacao individual e todas como lidas, filtrando por apenasNaoLidas', async () => {

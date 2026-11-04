@@ -116,7 +116,7 @@ export class NotificacoesService {
     const todos = new Set<number>([...participantes, ...(evento.destinatariosExtras ?? [])]);
 
     if (typeof evento.autorId === 'number') {
-      todos.delete(evento.autorId);
+      todos.add(evento.autorId);
     }
 
     if (todos.size === 0) {
