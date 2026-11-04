@@ -36,7 +36,8 @@ e inicia a API e o worker de e-mails. Pronto em:
 
 O seed cria `ana.souza@example.com` e `bruno.lima@example.com` (senha
 `senha12345`), a viagem `DEMO2027` (convite `EURO2027`) e a viagem concluída
-`DEMO2026`. Como a infraestrutura funciona está em
+`DEMO2026`. O passo a passo para testar está em
+[docs/happy-path.md](../docs/happy-path.md) e a explicação da infraestrutura em
 [docs/infra-ministack.md](../docs/infra-ministack.md).
 
 Portas ocupadas? Defina `POSTGRES_PORT`, `API_PORT` ou `MINISTACK_PORT` num `.env`

@@ -44,3 +44,4 @@ nav:
     - Identidade Visual: visual_id.md
     - Pipeline de CI/CD: pipeline.md
     - Infraestrutura (MiniStack): infra-ministack.md
+    - Happy path dos testes: happy-path.md
