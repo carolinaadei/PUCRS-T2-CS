@@ -630,10 +630,30 @@ descreve('Todos os endpoints contra o banco real (integracao)', () => {
   });
 
   describe('Notificacoes', () => {
-    it('as tres rotas respondem 501, conforme o contrato publicado', async () => {
-      await http().get('/api/notificacoes').set(comToken(tokenCriador)).expect(501);
-      await http().patch('/api/notificacoes/lidas').set(comToken(tokenCriador)).expect(501);
-      await http().patch('/api/notificacoes/1/lida').set(comToken(tokenCriador)).expect(501);
+    it('lista as notificacoes geradas na viagem e permite marca-las como lidas', async () => {
+      const listagem = await http()
+        .get('/api/notificacoes?apenasNaoLidas=true')
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(listagem.body.total).toBeGreaterThanOrEqual(1);
+      const primeiraId = listagem.body.itens[0].id as number;
+
+      const marcada = await http()
+        .patch(`/api/notificacoes/${primeiraId}/lida`)
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(marcada.body.lida).toBe(true);
+
+      await http().patch('/api/notificacoes/lidas').set(comToken(tokenCriador)).expect(204);
+
+      const aposLeitura = await http()
+        .get('/api/notificacoes?apenasNaoLidas=true')
+        .set(comToken(tokenCriador))
+        .expect(200);
+
+      expect(aposLeitura.body.total).toBe(0);
     });
   });
 

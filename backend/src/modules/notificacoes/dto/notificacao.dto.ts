@@ -1,12 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
 
-/** RF21 - aviso in-app de uma alteracao relevante na viagem. */
+/** Aviso in-app de uma alteracao relevante na viagem. */
 export class NotificacaoDto {
-  @ApiProperty({ example: 1 })
+  @ApiProperty({
+    example: 1,
+    description: 'Id da notificacao: e o {notificacaoId} ao marcar como lida',
+  })
   id!: number;
 
-  @ApiProperty({ example: 'DEMO2027' })
+  @ApiProperty({ example: 'DEMO2027', description: 'Codigo da viagem em que ocorreu a alteracao' })
   viagemId!: string;
 
   @ApiProperty({ example: 'ATIVIDADE_ADICIONADA', description: 'O que mudou na viagem' })
