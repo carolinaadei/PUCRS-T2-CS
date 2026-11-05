@@ -1,18 +1,12 @@
-import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { Global, Module } from '@nestjs/common';
 import { NotificacoesController } from './notificacoes.controller';
-import { NotificacoesInterceptor } from './notificacoes.interceptor';
 import { NotificacoesService } from './notificacoes.service';
 
+/** Global: todo modulo que altera uma viagem registra as notificacoes dela. */
+@Global()
 @Module({
   controllers: [NotificacoesController],
-  providers: [
-    NotificacoesService,
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: NotificacoesInterceptor,
-    },
-  ],
+  providers: [NotificacoesService],
   exports: [NotificacoesService],
 })
 export class NotificacoesModule {}

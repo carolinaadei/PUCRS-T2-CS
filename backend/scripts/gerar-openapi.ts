@@ -13,6 +13,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 
 const DESTINO = resolve(__dirname, '..', 'openapi.json');
@@ -35,6 +36,7 @@ async function gerar(): Promise<void> {
   await import('../test/setup-env');
 
   const { AppModule } = await import('../src/app.module');
+  const { configurarAplicacao } = await import('../src/config/aplicacao');
   const { criarDocumentoSwagger } = await import('../src/config/swagger');
   const { PrismaService } = await import('../src/prisma/prisma.service');
 
@@ -43,10 +45,11 @@ async function gerar(): Promise<void> {
     .useValue(prismaMock)
     .compile();
 
-  const app = modulo.createNestApplication();
+  const app = modulo.createNestApplication<NestExpressApplication>();
 
-  // O prefixo entra nos paths do documento, entao precisa ser o mesmo do boot.
-  app.setGlobalPrefix(process.env.API_PREFIX ?? 'api');
+  // Prefixo e versao entram nos paths do documento: a configuracao precisa ser
+  // exatamente a do boot, e por isso vem da mesma funcao.
+  configurarAplicacao(app);
   await app.init();
 
   const documento = criarDocumentoSwagger(app);

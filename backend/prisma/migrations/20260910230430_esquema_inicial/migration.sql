@@ -51,6 +51,10 @@ CREATE TABLE "membro_viagem" (
 
 -- CreateTable
 CREATE TABLE "destino_catalogo" (
+    "fonte" VARCHAR(40) NOT NULL DEFAULT 'manual',
+    "id_externo" VARCHAR(2048),
+    "codigo_pais" VARCHAR(2),
+    "atribuicoes" JSONB NOT NULL DEFAULT '[]',
     "id" SERIAL NOT NULL,
     "nome" VARCHAR(120) NOT NULL,
     "pais" VARCHAR(80),
@@ -87,9 +91,11 @@ CREATE TABLE "catalogo_atividade" (
     "pais" VARCHAR(80),
     "latitude" DOUBLE PRECISION,
     "longitude" DOUBLE PRECISION,
-    "google_place_id" VARCHAR(255),
+    "id_externo" VARCHAR(2048),
+    "codigo_pais" VARCHAR(2),
+    "atribuicoes" JSONB NOT NULL DEFAULT '[]',
     "foto_url" VARCHAR(500),
-    "fonte" VARCHAR(40) NOT NULL DEFAULT 'google_places',
+    "fonte" VARCHAR(40) NOT NULL DEFAULT 'manual',
     "media_avaliacao" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -150,7 +156,8 @@ CREATE INDEX "destino_catalogo_nome_idx" ON "destino_catalogo"("nome");
 CREATE INDEX "destino_viagem_viagem_id_idx" ON "destino_viagem"("viagem_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "catalogo_atividade_google_place_id_key" ON "catalogo_atividade"("google_place_id");
+CREATE UNIQUE INDEX "catalogo_atividade_fonte_id_externo_key" ON "catalogo_atividade"("fonte", "id_externo");
+CREATE UNIQUE INDEX "destino_catalogo_fonte_id_externo_key" ON "destino_catalogo"("fonte", "id_externo");
 
 -- CreateIndex
 CREATE INDEX "catalogo_atividade_nome_idx" ON "catalogo_atividade"("nome");

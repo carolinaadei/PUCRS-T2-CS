@@ -1,127 +1,166 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Prisma, StatusAtividade, StatusViagem } from '@prisma/client';
+import { PaginacaoDto, RespostaPaginada } from '../../common/dto/paginacao.dto';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { naoEncontrado, proibido } from '../../common/erros/erros';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CriarAvaliacaoDto } from './dto/criar-avaliacao.dto';
+import { travarAtividadeCatalogo } from '../../prisma/travas';
+import { INCLUIR_AUTOR, paraAvaliacaoDto } from './avaliacoes.mapper';
+import { AvaliacaoDto } from './dto/avaliacao-resposta.dto';
+import { SalvarAvaliacaoDto } from './dto/salvar-avaliacao.dto';
+
+type Tx = Prisma.TransactionClient;
 
 /**
- * Servico responsavel pelas regras de negocio do Modulo 7 (Avaliacao e Descoberta de Atividades).
- * Implementa a criacao, atualizacao, consulta e remocao de avaliacoes (RF22 e RF23),
- * mantendo consistente a media de notas do catalogo de atividades (RN01, RN05).
+ * Avaliacoes de atividades. Cada usuario tem no maximo uma por atividade, e a
+ * media do catalogo (campo derivado, usado no filtro de nota e nos destaques) e
+ * recalculada na mesma transacao, com a atividade travada.
  */
 @Injectable()
 export class AvaliacoesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * RF23, RN01 - Lista todas as avaliacoes registradas para uma atividade do catalogo.
-   * As avaliacoes sao publicas e ordenadas a partir da mais recente.
-   * @param catalogoAtividadeId Identificador da atividade no catalogo.
-   * @throws NotFoundException Se a atividade nao existir no catalogo.
-   * @returns Lista de avaliacoes com os dados publicos dos respectivos autores.
-   */
-  async listarDaAtividade(catalogoAtividadeId: number) {
-    await this.garantirAtividadeNoCatalogo(catalogoAtividadeId);
+  /** Avaliacoes publicas da atividade, mais recentes primeiro. */
+  async listarDaAtividade(catalogoAtividadeId: number, paginacao: PaginacaoDto) {
+    await this.garantirAtividade(this.prisma, catalogoAtividadeId);
 
-    return this.prisma.avaliacao.findMany({
-      where: { catalogoAtividadeId },
-      include: { usuario: { select: { id: true, nome: true } } },
-      orderBy: { criadoEm: 'desc' },
-    });
+    const where = { catalogoAtividadeId };
+    const [itens, total] = await this.prisma.$transaction([
+      this.prisma.avaliacao.findMany({
+        where,
+        include: INCLUIR_AUTOR,
+        orderBy: [{ criadoEm: 'desc' }, { id: 'desc' }],
+        skip: paginacao.pular,
+        take: paginacao.limite,
+      }),
+      this.prisma.avaliacao.count({ where }),
+    ]);
+
+    return new RespostaPaginada(itens.map(paraAvaliacaoDto), total, paginacao);
   }
 
-  /**
-   * RF22, RN05 - Registra ou atualiza a avaliacao de uma atividade por um usuario autenticado.
-   * Cada usuario possui no maximo uma avaliacao por atividade; se ja tiver avaliado,
-   * a nota e o comentario sao atualizados (upsert). A media da atividade e recalculada.
-   * @param usuarioId Identificador do usuario autenticado que esta avaliando.
-   * @param catalogoAtividadeId Identificador da atividade no catalogo.
-   * @param dto Dados contendo nota (1 a 5) e comentario opcional.
-   * @throws NotFoundException Se a atividade informada nao existir no catalogo.
-   * @returns Registro da avaliacao com os dados do autor.
-   */
-  async avaliar(usuarioId: number, catalogoAtividadeId: number, dto: CriarAvaliacaoDto) {
-    await this.garantirAtividadeNoCatalogo(catalogoAtividadeId);
+  async buscarMinha(usuarioId: number, catalogoAtividadeId: number): Promise<AvaliacaoDto> {
+    await this.garantirAtividade(this.prisma, catalogoAtividadeId);
 
-    const comentario = dto.comentario?.trim() || null;
-
-    const avaliacao = await this.prisma.avaliacao.upsert({
-      where: { usuarioId_catalogoAtividadeId: { usuarioId, catalogoAtividadeId } },
-      create: {
-        usuarioId,
-        catalogoAtividadeId,
-        nota: dto.nota,
-        comentario,
-      },
-      update: {
-        nota: dto.nota,
-        comentario,
-      },
-      include: { usuario: { select: { id: true, nome: true } } },
-    });
-
-    await this.recalcularMedia(catalogoAtividadeId);
-
-    return avaliacao;
-  }
-
-  /**
-   * RF22 - Remove uma avaliacao existente. Apenas o proprio autor pode remove-la.
-   * Apos a remocao, a media de avaliacoes da atividade e recalculada automaticamente.
-   * @param usuarioId Identificador do usuario autenticado solicitando a remocao.
-   * @param avaliacaoId Identificador da avaliacao a ser excluida.
-   * @throws NotFoundException Se a avaliacao nao for encontrada.
-   * @throws ForbiddenException Se o usuario nao for o autor da avaliacao.
-   */
-  async remover(usuarioId: number, avaliacaoId: number) {
     const avaliacao = await this.prisma.avaliacao.findUnique({
-      where: { id: avaliacaoId },
-      select: { usuarioId: true, catalogoAtividadeId: true },
+      where: { usuarioId_catalogoAtividadeId: { usuarioId, catalogoAtividadeId } },
+      include: INCLUIR_AUTOR,
     });
 
     if (!avaliacao) {
-      throw new NotFoundException('Avaliacao nao encontrada');
+      throw this.semAvaliacao();
     }
 
-    if (avaliacao.usuarioId !== usuarioId) {
-      throw new ForbiddenException('Voce so pode remover as suas proprias avaliacoes');
-    }
-
-    await this.prisma.avaliacao.delete({ where: { id: avaliacaoId } });
-    await this.recalcularMedia(avaliacao.catalogoAtividadeId);
+    return paraAvaliacaoDto(avaliacao);
   }
 
   /**
-   * Mantem o campo derivado `media_avaliacao` da tabela `catalogo_atividade` sincronizado
-   * a cada escrita (criacao, atualizacao ou exclusao de avaliacoes), usado nos filtros do RF24
-   * e destaques do RF25.
-   * @param catalogoAtividadeId Identificador da atividade a ter a media atualizada.
+   * Cria ou substitui a avaliacao do usuario. So avalia quem fez: a atividade
+   * precisa estar CONCLUIDA (ou numa viagem CONCLUIDA) numa viagem de que o
+   * usuario participa.
    */
-  private async recalcularMedia(catalogoAtividadeId: number): Promise<void> {
-    const agregado = await this.prisma.avaliacao.aggregate({
-      where: { catalogoAtividadeId },
-      _avg: { nota: true },
-    });
+  async salvarMinha(
+    usuarioId: number,
+    catalogoAtividadeId: number,
+    dto: SalvarAvaliacaoDto,
+  ): Promise<{ avaliacao: AvaliacaoDto; criada: boolean }> {
+    return this.prisma.$transaction(async (tx) => {
+      await this.garantirAtividade(tx, catalogoAtividadeId);
+      await travarAtividadeCatalogo(tx, catalogoAtividadeId);
+      await this.garantirQueRealizou(tx, usuarioId, catalogoAtividadeId);
 
-    const media = agregado._avg.nota ? Math.round(agregado._avg.nota * 10) / 10 : 0;
+      const chave = { usuarioId_catalogoAtividadeId: { usuarioId, catalogoAtividadeId } };
+      const existente = await tx.avaliacao.findUnique({ where: chave, select: { id: true } });
+      const dados = { nota: dto.nota, comentario: dto.comentario ?? null };
 
-    await this.prisma.catalogoAtividade.update({
-      where: { id: catalogoAtividadeId },
-      data: { mediaAvaliacao: media },
+      const avaliacao = await tx.avaliacao.upsert({
+        where: chave,
+        create: { usuarioId, catalogoAtividadeId, ...dados },
+        update: dados,
+        include: INCLUIR_AUTOR,
+      });
+
+      await this.recalcularMedia(tx, catalogoAtividadeId);
+
+      return { avaliacao: paraAvaliacaoDto(avaliacao), criada: !existente };
     });
   }
 
-  /**
-   * Verifica se a atividade informada existe no catalogo global antes de criar ou listar avaliacoes.
-   * @param catalogoAtividadeId Identificador da atividade a ser verificada.
-   * @throws NotFoundException Se a atividade nao for encontrada.
-   */
-  private async garantirAtividadeNoCatalogo(catalogoAtividadeId: number): Promise<void> {
-    const atividade = await this.prisma.catalogoAtividade.findUnique({
+  async removerMinha(usuarioId: number, catalogoAtividadeId: number): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.garantirAtividade(tx, catalogoAtividadeId);
+      await travarAtividadeCatalogo(tx, catalogoAtividadeId);
+
+      const { count } = await tx.avaliacao.deleteMany({
+        where: { usuarioId, catalogoAtividadeId },
+      });
+      if (count === 0) {
+        throw this.semAvaliacao();
+      }
+
+      await this.recalcularMedia(tx, catalogoAtividadeId);
+    });
+  }
+
+  private semAvaliacao() {
+    return naoEncontrado(
+      CodigoErro.AVALIACAO_NAO_ENCONTRADA,
+      'Voce ainda nao avaliou esta atividade',
+    );
+  }
+
+  private async garantirAtividade(tx: Tx, catalogoAtividadeId: number) {
+    const atividade = await tx.catalogoAtividade.findUnique({
       where: { id: catalogoAtividadeId },
       select: { id: true },
     });
 
     if (!atividade) {
-      throw new NotFoundException('Atividade nao encontrada no catalogo');
+      throw naoEncontrado(
+        CodigoErro.ATIVIDADE_CATALOGO_NAO_ENCONTRADA,
+        'Atividade nao encontrada no catalogo',
+      );
     }
+  }
+
+  private async garantirQueRealizou(tx: Tx, usuarioId: number, catalogoAtividadeId: number) {
+    const realizacoes = await tx.atividadeViagem.count({
+      where: {
+        catalogoAtividadeId,
+        AND: [
+          {
+            destinoViagem: {
+              viagem: { OR: [{ criadoPor: usuarioId }, { membros: { some: { usuarioId } } }] },
+            },
+          },
+          {
+            OR: [
+              { status: StatusAtividade.CONCLUIDA },
+              { destinoViagem: { viagem: { status: StatusViagem.CONCLUIDA } } },
+            ],
+          },
+        ],
+      },
+    });
+
+    if (realizacoes === 0) {
+      throw proibido(
+        CodigoErro.ATIVIDADE_NAO_REALIZADA,
+        'So e possivel avaliar uma atividade concluida numa viagem de que voce participa',
+      );
+    }
+  }
+
+  /** Media com uma casa decimal; 0 quando a atividade fica sem avaliacoes. */
+  private async recalcularMedia(tx: Tx, catalogoAtividadeId: number): Promise<void> {
+    const { _avg } = await tx.avaliacao.aggregate({
+      where: { catalogoAtividadeId },
+      _avg: { nota: true },
+    });
+
+    await tx.catalogoAtividade.update({
+      where: { id: catalogoAtividadeId },
+      data: { mediaAvaliacao: _avg.nota ? Math.round(_avg.nota * 10) / 10 : 0 },
+    });
   }
 }

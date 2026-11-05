@@ -70,6 +70,29 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # As suites de integracao (test/integracao) rodam contra um PostgreSQL e um
+    # MiniStack de verdade: transacoes, travas, cascatas, upload no S3 e a fila
+    # de e-mails nao se testam com mock.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: viajajunto
+          POSTGRES_PASSWORD: viajajunto
+          POSTGRES_DB: viajajunto_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U viajajunto"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # A imagem traz HEALTHCHECK proprio; o runner espera ficar healthy.
+      ministack:
+        image: ministackorg/ministack:1.5.37
+        ports: ['4566:4566']
+    env:
+      DATABASE_URL_TESTE: postgresql://viajajunto:viajajunto@localhost:5432/viajajunto_test?schema=public
+      MINISTACK_TESTE: http://localhost:4566
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -85,12 +108,33 @@ jobs:
       - name: Gerar o cliente Prisma
         run: npm run prisma:generate
 
+      - name: Aplicar as migrations no banco de teste
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_TESTE }}
+        run: npx prisma migrate deploy
+
+      # O mesmo `cloudformation deploy` do docker-compose. Se o modelo usar um
+      # recurso que o MiniStack nao conhece, ou tiver erro, o job para aqui.
+      - name: Aplicar a pilha CloudFormation no MiniStack
+        working-directory: .
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ENDPOINT_URL: ${{ env.MINISTACK_TESTE }}
+        run: |
+          aws cloudformation deploy \
+            --stack-name viajajunto-local \
+            --template-file infra/cloudformation/viajajunto.yaml \
+            --no-fail-on-empty-changeset
+          aws cloudformation describe-stacks --stack-name viajajunto-local \
+            --query 'Stacks[0].StackStatus' --output text
+
       - name: Testes unitarios
         run: npm run test:cov
 
-      # Os e2e usam um PrismaService mockado, entao nao precisam de banco no CI.
-      # A suite "integracao" se auto-pula sem um DATABASE_URL real.
-      - name: Testes e2e
+      # Inclui as suites de integracao, que usam o Postgres e o MiniStack acima.
+      - name: Testes e2e e de integracao
         run: npm run test:cov:e2e
 
       # Os dois lcov seguem para o Sonar: sozinha, a cobertura unitaria ignoraria

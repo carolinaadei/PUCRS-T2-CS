@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-/** Parametros de paginacao reutilizaveis nas listagens (RF06, RF24). */
+/** Parametros de paginacao reutilizaveis nas listagens. */
 export class PaginacaoDto {
   @ApiPropertyOptional({ default: 1, minimum: 1, description: 'Pagina desejada' })
   @Type(() => Number)

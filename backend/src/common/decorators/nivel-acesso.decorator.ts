@@ -4,14 +4,14 @@ export const CHAVE_NIVEL_ACESSO = 'nivelAcessoViagem';
 
 /**
  * Niveis de acesso a uma viagem, do menos ao mais restritivo.
- * Mapeiam as regras de negocio RN02, RN03, RN04 e RN06.
+ * MEMBRO < EDITOR < CRIADOR.
  */
 export enum NivelAcessoViagem {
-  /** RN06 - criador ou colaborador convidado (inclui VISUALIZADOR). */
+  /** Criador ou qualquer colaborador (inclui VISUALIZADOR). */
   MEMBRO = 'MEMBRO',
-  /** RN02 - criador ou colaborador com permissao EDITOR. */
+  /** Criador ou colaborador com permissao EDITOR. */
   EDITOR = 'EDITOR',
-  /** RN04 - somente o criador da viagem. */
+  /** Somente o criador da viagem. */
   CRIADOR = 'CRIADOR',
 }
 

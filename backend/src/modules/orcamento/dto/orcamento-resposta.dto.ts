@@ -1,19 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-/** Orcamento da viagem. Os valores Decimal chegam como string. */
+/** Orcamento da viagem. Valores monetarios em string com duas casas. */
 export class OrcamentoDto {
-  @ApiProperty({ example: 1 })
-  id!: number;
-
   @ApiProperty({ example: 'DEMO2027' })
   viagemId!: string;
 
-  @ApiProperty({ example: '12000', description: 'Orcamento total (Decimal como string)' })
+  @ApiProperty({ example: '12000.00', description: 'Orcamento total' })
   valorTotal!: string;
 
-  @ApiProperty({
-    example: '120',
-    description: 'Soma dos custos previstos das atividades (Decimal como string)',
-  })
+  @ApiProperty({ example: '120.00', description: 'Soma dos custos previstos das atividades' })
   previstoAtividades!: string;
+
+  @ApiProperty({
+    example: '11880.00',
+    description: 'valorTotal - previstoAtividades. Negativo quando o planejado estoura o total',
+  })
+  saldoDisponivel!: string;
 }

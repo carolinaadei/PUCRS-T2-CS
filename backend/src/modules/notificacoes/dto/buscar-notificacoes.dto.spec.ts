@@ -1,48 +1,35 @@
-import { BadRequestException } from '@nestjs/common';
-import { criarPipeValidacao } from '../../../common/pipes/pipe-validacao';
+import { errosDoDto, mensagens, validarDto } from '../../../../test/apoio/validar-dto';
 import { BuscarNotificacoesDto } from './buscar-notificacoes.dto';
 
-const validar = (query: object) =>
-  criarPipeValidacao().transform(query, { type: 'query', metatype: BuscarNotificacoesDto });
-
-const mensagensDoErro = (query: object) =>
-  validar(query).catch((erro: BadRequestException) => erro.getResponse());
+const validar = (query: object) => validarDto(BuscarNotificacoesDto, query, 'query');
 
 describe('BuscarNotificacoesDto', () => {
   it('usa os padroes de paginacao quando nenhum filtro e informado', async () => {
-    const dto = (await validar({})) as BuscarNotificacoesDto;
+    const dto = await validar({});
 
-    expect(dto.pagina).toBe(1);
-    expect(dto.limite).toBe(20);
+    expect(dto).toMatchObject({ pagina: 1, limite: 20, pular: 0 });
     expect(dto.apenasNaoLidas).toBeUndefined();
-    expect(dto.pular).toBe(0);
   });
 
-  it('converte apenasNaoLidas enviado como string "true" ou "false"', async () => {
-    const verdadeiro = (await validar({ apenasNaoLidas: 'true' })) as BuscarNotificacoesDto;
-    const falso = (await validar({ apenasNaoLidas: 'false' })) as BuscarNotificacoesDto;
-
-    expect(verdadeiro.apenasNaoLidas).toBe(true);
-    expect(falso.apenasNaoLidas).toBe(false);
+  it.each([
+    ['true', true],
+    ['false', false],
+    [true, true],
+    [false, false],
+  ])('converte apenasNaoLidas %p em %p', async (valor, esperado) => {
+    expect((await validar({ apenasNaoLidas: valor })).apenasNaoLidas).toBe(esperado);
   });
 
-  it('aceita apenasNaoLidas booleano diretamente', async () => {
-    const verdadeiro = (await validar({ apenasNaoLidas: true })) as BuscarNotificacoesDto;
-    const falso = (await validar({ apenasNaoLidas: false })) as BuscarNotificacoesDto;
-
-    expect(verdadeiro.apenasNaoLidas).toBe(true);
-    expect(falso.apenasNaoLidas).toBe(false);
-  });
-
-  it('recusa valores invalidos para apenasNaoLidas com mensagem em portugues', async () => {
-    await expect(mensagensDoErro({ apenasNaoLidas: 'talvez' })).resolves.toMatchObject({
-      message: ['O filtro apenasNaoLidas deve ser verdadeiro ou falso'],
-    });
+  it('recusa valores invalidos com mensagem em portugues', async () => {
+    expect(
+      mensagens(await errosDoDto(BuscarNotificacoesDto, { apenasNaoLidas: 'talvez' })),
+    ).toEqual(['O filtro apenasNaoLidas deve ser verdadeiro ou falso']);
   });
 
   it('valida os limites de paginacao herdados de PaginacaoDto', async () => {
-    await expect(mensagensDoErro({ pagina: 0, limite: 500 })).resolves.toMatchObject({
-      message: ['A pagina deve ser no minimo 1', 'O limite deve ser no maximo 100'],
-    });
+    expect(mensagens(await errosDoDto(BuscarNotificacoesDto, { pagina: 0, limite: 500 }))).toEqual([
+      'A pagina deve ser no minimo 1',
+      'O limite deve ser no maximo 100',
+    ]);
   });
 });

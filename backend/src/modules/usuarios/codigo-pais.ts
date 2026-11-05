@@ -1,6 +1,6 @@
 /**
  * Conversao de nomes de paises (em portugues, ingles ou sigla ISO) para o
- * codigo ISO 3166-1 alfa-2 exigido pelo jsVectormap (RF11).
+ * codigo ISO 3166-1 alfa-2 exigido pelo jsVectormap.
  */
 
 function normalizar(texto: string): string {
@@ -37,9 +37,27 @@ const nomesEn = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none'
 const MAPA_NOME_PARA_ISO = new Map<string, string>();
 const CODIGOS_VALIDOS = new Set<string>();
 
+/**
+ * Codigos que o Intl nomeia mas nao sao paises no mapa: blocos (EU, EZ, UN),
+ * regioes de uso privado (QO, XA, XB) e a "regiao desconhecida" (ZZ).
+ */
+const NAO_SAO_PAISES = new Set(['EU', 'EZ', 'UN', 'QO', 'XA', 'XB', 'ZZ']);
+
+/**
+ * Codigos obsoletos (DD, a Alemanha Oriental; YU; ...) sao canonizados pelo
+ * Intl para o atual e herdam o nome dele. Sem este filtro, "Germany" viraria
+ * DD, que o jsVectormap nao conhece.
+ */
+const ehCodigoAtual = (codigo: string) =>
+  !NAO_SAO_PAISES.has(codigo) && Intl.getCanonicalLocales(`und-${codigo}`)[0] === `und-${codigo}`;
+
 for (let c1 = 65; c1 <= 90; c1++) {
   for (let c2 = 65; c2 <= 90; c2++) {
     const codigo = String.fromCharCode(c1, c2);
+    if (!ehCodigoAtual(codigo)) {
+      continue;
+    }
+
     const nomePt = nomesPt.of(codigo);
 
     if (nomePt && nomePt !== codigo) {
@@ -80,12 +98,9 @@ export function resolverPaisIso(pais?: string | null): PaisResolvido | null {
     return null;
   }
 
-  if (/^[a-zA-Z]{2}$/.test(limpo)) {
-    const sigla = limpo.toUpperCase();
-    if (!CODIGOS_VALIDOS.has(sigla)) {
-      return null;
-    }
-
+  // Sigla valida resolve direto; as demais ("uk") seguem para os apelidos.
+  const sigla = limpo.toUpperCase();
+  if (/^[A-Z]{2}$/.test(sigla) && CODIGOS_VALIDOS.has(sigla)) {
     return {
       codigo: sigla,
       nome: nomesPt.of(sigla) ?? sigla,

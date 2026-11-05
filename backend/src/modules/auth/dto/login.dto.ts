@@ -1,17 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
-/** RF02 - Dados de entrada para autenticacao de usuario (login). */
 export class LoginDto {
-  /** Endereco de e-mail cadastrado da conta. */
   @ApiProperty({ example: 'ana.souza@example.com' })
-  @IsNotEmpty({ message: 'O e-mail e obrigatorio' })
-  @IsEmail({}, { message: 'Formato de e-mail invalido' })
+  @IsEmail({}, { message: 'Informe um e-mail valido' })
+  @MaxLength(180, { message: 'O e-mail deve ter no maximo 180 caracteres' })
   email!: string;
 
-  /** Senha em texto plano para autenticacao. */
   @ApiProperty({ example: 'senha12345' })
-  @IsString({ message: 'A senha deve ser uma string' })
+  @IsString({ message: 'A senha deve ser um texto' })
   @IsNotEmpty({ message: 'A senha e obrigatoria' })
+  @MaxLength(72, { message: 'A senha deve ter no maximo 72 caracteres' })
   senha!: string;
 }
