@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
- * RF03 - resposta da etapa 2. O `tokenTroca` nao e o codigo do e-mail: e uma
- * credencial de vida curta, emitida apenas depois que o codigo conferiu, e e a
- * unica coisa que autoriza a troca da senha na etapa 3.
+ * Resposta da etapa 2 da recuperacao. O `tokenTroca` nao e o codigo do e-mail:
+ * e uma credencial de vida curta, emitida apenas depois que o codigo conferiu, e
+ * e a unica coisa que autoriza a troca da senha na etapa 3.
  */
 export class RespostaVerificacaoDto {
   @ApiProperty({

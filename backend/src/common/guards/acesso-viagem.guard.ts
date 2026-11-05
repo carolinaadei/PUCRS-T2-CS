@@ -1,23 +1,18 @@
-import {
-  BadRequestException,
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissaoMembro } from '@prisma/client';
 import { CHAVE_NIVEL_ACESSO, NivelAcessoViagem } from '../decorators/nivel-acesso.decorator';
-import { UsuarioAutenticado } from '../types/usuario-autenticado';
+import { CodigoErro } from '../erros/codigos-erro';
+import { naoEncontrado, proibido } from '../erros/erros';
+import { ContextoViagem, PapelNaViagem, UsuarioAutenticado } from '../types/usuario-autenticado';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * Controle de acesso por viagem (RNF03, RN02, RN03, RN04, RN06).
+ * Controle de acesso por viagem.
  *
  * Le o parametro de rota `:viagemId` e verifica se o usuario autenticado
  * atende ao nivel exigido pelo decorator @NivelAcesso(). O vinculo resolvido
- * fica em `req.viagemContexto` para reuso pelos services.
+ * fica em `req.viagemContexto` para reuso pelos controllers.
  */
 @Injectable()
 export class AcessoViagemGuard implements CanActivate {
@@ -37,12 +32,16 @@ export class AcessoViagemGuard implements CanActivate {
       return true;
     }
 
-    const requisicao = contexto.switchToHttp().getRequest();
-    const usuario: UsuarioAutenticado = requisicao.user;
-    const viagemId: string | undefined = requisicao.params?.viagemId;
+    const requisicao = contexto.switchToHttp().getRequest<{
+      user: UsuarioAutenticado;
+      params?: { viagemId?: string };
+      viagemContexto?: ContextoViagem;
+    }>();
+    const usuario = requisicao.user;
+    const viagemId = requisicao.params?.viagemId;
 
     if (!viagemId) {
-      throw new BadRequestException('Rota protegida por @NivelAcesso exige o parametro :viagemId');
+      throw new Error('Rota protegida por @NivelAcesso exige o parametro :viagemId');
     }
 
     const viagem = await this.prisma.viagem.findUnique({
@@ -50,45 +49,35 @@ export class AcessoViagemGuard implements CanActivate {
       select: {
         id: true,
         criadoPor: true,
-        membros: {
-          where: { usuarioId: usuario.id },
-          select: { permissao: true },
-        },
+        membros: { where: { usuarioId: usuario.id }, select: { permissao: true } },
       },
     });
 
-    if (!viagem) {
-      throw new NotFoundException(`Viagem ${viagemId} nao encontrada`);
+    // Quem nao participa recebe 404, e nao 403: nao revelamos que a viagem existe.
+    const ehCriador = viagem?.criadoPor === usuario.id;
+    const vinculo = viagem?.membros[0];
+
+    if (!viagem || (!ehCriador && !vinculo)) {
+      throw naoEncontrado(CodigoErro.VIAGEM_NAO_ENCONTRADA, 'Viagem nao encontrada');
     }
 
-    const ehCriador = viagem.criadoPor === usuario.id;
-    const vinculo = viagem.membros[0];
-    const ehEditor = ehCriador || vinculo?.permissao === PermissaoMembro.EDITOR;
-    const ehMembro = ehCriador || Boolean(vinculo);
+    const papel: PapelNaViagem = ehCriador ? 'CRIADOR' : vinculo!.permissao;
 
-    const autorizado =
-      (nivelExigido === NivelAcessoViagem.CRIADOR && ehCriador) ||
-      (nivelExigido === NivelAcessoViagem.EDITOR && ehEditor) ||
-      (nivelExigido === NivelAcessoViagem.MEMBRO && ehMembro);
-
-    if (!autorizado) {
-      // RN06: nao revelamos a existencia de viagens das quais o usuario nao participa.
-      if (!ehMembro) {
-        throw new NotFoundException(`Viagem ${viagemId} nao encontrada`);
-      }
-
-      throw new ForbiddenException(
-        nivelExigido === NivelAcessoViagem.CRIADOR
-          ? 'Apenas o criador da viagem pode executar esta acao'
-          : 'Seu nivel de permissao nesta viagem e somente leitura',
+    if (nivelExigido === NivelAcessoViagem.CRIADOR && papel !== 'CRIADOR') {
+      throw proibido(
+        CodigoErro.APENAS_CRIADOR,
+        'Apenas o criador da viagem pode executar esta acao',
       );
     }
 
-    requisicao.viagemContexto = {
-      viagemId: viagem.id,
-      ehCriador,
-      permissao: ehCriador ? PermissaoMembro.EDITOR : vinculo?.permissao,
-    };
+    if (nivelExigido === NivelAcessoViagem.EDITOR && papel === PermissaoMembro.VISUALIZADOR) {
+      throw proibido(
+        CodigoErro.SOMENTE_LEITURA,
+        'Seu nivel de permissao nesta viagem e somente leitura',
+      );
+    }
+
+    requisicao.viagemContexto = { viagemId: viagem.id, papel };
 
     return true;
   }

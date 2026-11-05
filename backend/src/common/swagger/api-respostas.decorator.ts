@@ -1,77 +1,93 @@
 import { applyDecorators } from '@nestjs/common';
 import { ApiBearerAuth, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { NivelAcessoViagem } from '../decorators/nivel-acesso.decorator';
+import { CodigoErro } from '../erros/codigos-erro';
 import { ErroRespostaDto } from './erro-resposta.dto';
 
-const NOME_DO_STATUS: Record<number, string> = {
-  400: 'Bad Request',
-  401: 'Unauthorized',
-  403: 'Forbidden',
-  404: 'Not Found',
-  409: 'Conflict',
-  429: 'Too Many Requests',
-  501: 'Not Implemented',
-};
+const exemplo = (status: number, codigo: CodigoErro, mensagem: string, detalhes?: unknown) => ({
+  statusCode: status,
+  codigo,
+  mensagem,
+  ...(detalhes !== undefined && { detalhes }),
+  requestId: '6f1c2b7e-1a4d-4c1e-9a8f-0d2b3c4e5f60',
+  caminho: '/api/v1/...',
+  timestamp: '2027-01-10T12:00:00.000Z',
+});
 
 /**
- * Documenta uma resposta de erro com o corpo padrao do Nest. A `descricao`
- * aparece na lista de respostas; `mensagem` e o `message` do exemplo.
+ * Documenta uma resposta de erro. Varios codigos no mesmo status entram juntos
+ * na descricao, e o primeiro vira o exemplo.
  */
-export const ApiErro = (
-  status: number,
-  descricao: string,
-  mensagem: string | string[] = descricao,
-) =>
-  ApiResponse({
+export const ApiErro = (status: number, codigos: CodigoErro | CodigoErro[], descricao: string) => {
+  const lista = Array.isArray(codigos) ? codigos : [codigos];
+
+  return ApiResponse({
     status,
-    description: descricao,
+    description: `${descricao} (${lista.map((codigo) => `\`${codigo}\``).join(', ')})`,
     type: ErroRespostaDto,
-    example: { statusCode: status, message: mensagem, error: NOME_DO_STATUS[status] },
+    example: exemplo(status, lista[0], descricao),
+  });
+};
+
+/** 400 da validacao do corpo, da query ou de um parametro de rota. */
+export const ApiErroValidacao = (...mensagens: string[]) =>
+  ApiResponse({
+    status: 400,
+    description: 'Dados invalidos: campo ausente, fora do formato ou nao declarado (`VALIDACAO`)',
+    type: ErroRespostaDto,
+    example: exemplo(400, CodigoErro.VALIDACAO, 'Dados invalidos', [
+      { campo: 'campo', mensagens: mensagens.length > 0 ? mensagens : ['Mensagem do campo'] },
+    ]),
   });
 
-/** 400 da validacao do corpo ou da query, com exemplos das mensagens por campo. */
-export const ApiErroValidacao = (...mensagens: string[]) =>
-  ApiErro(400, 'Dados invalidos: campo ausente, fora do formato ou nao declarado', mensagens);
-
-/** Rota que exige `Authorization: Bearer <token>` (JwtAuthGuard global). */
+/** Rota que exige `Authorization: Bearer <accessToken>` (JwtAuthGuard global). */
 export const ApiAutenticado = () =>
   applyDecorators(
     ApiBearerAuth(),
-    ApiErro(401, 'Token ausente, invalido, expirado ou revogado', 'Unauthorized'),
+    ApiErro(
+      401,
+      [CodigoErro.NAO_AUTENTICADO, CodigoErro.SESSAO_ENCERRADA],
+      'Token ausente, invalido, expirado ou revogado',
+    ),
   );
 
-/** Parametro `:viagemId`, que e tambem o codigo de convite da viagem. */
+/** Parametro `:viagemId`. */
 export const ApiParamViagem = () =>
-  ApiParam({ name: 'viagemId', description: 'Codigo da viagem', example: 'A3KD9F2P' });
+  ApiParam({ name: 'viagemId', description: 'Id da viagem', example: 'DEMO2027' });
 
-const MOTIVO_403: Partial<Record<NivelAcessoViagem, string>> = {
-  [NivelAcessoViagem.EDITOR]: 'Seu nivel de permissao nesta viagem e somente leitura',
-  [NivelAcessoViagem.CRIADOR]: 'Apenas o criador da viagem pode executar esta acao',
+/** Parametro numerico de rota, validado pelo ParseIdPipe. */
+export const ApiParamId = (nome: string, descricao: string) =>
+  ApiParam({ name: nome, type: Number, description: descricao, example: 1 });
+
+const MOTIVO_403: Partial<Record<NivelAcessoViagem, [CodigoErro, string]>> = {
+  [NivelAcessoViagem.EDITOR]: [
+    CodigoErro.SOMENTE_LEITURA,
+    'Seu nivel de permissao nesta viagem e somente leitura',
+  ],
+  [NivelAcessoViagem.CRIADOR]: [
+    CodigoErro.APENAS_CRIADOR,
+    'Apenas o criador da viagem pode executar esta acao',
+  ],
 };
 
 /**
  * Respostas do AcessoViagemGuard para o nivel exigido em `@NivelAcesso`: 404
- * para quem nao participa (RN06) e 403 para quem participa sem permissao.
- * `outroNaoEncontrado` descreve outro 404 possivel na mesma rota.
+ * para quem nao participa e 403 para quem participa sem a permissao. `outros404`
+ * acrescenta os demais "nao encontrado" possiveis na mesma rota.
  */
-export const ApiAcessoViagem = (nivel: NivelAcessoViagem, outroNaoEncontrado?: string) => {
-  const naoEncontrada = 'Viagem nao encontrada ou voce nao participa dela (RN06)';
+export const ApiAcessoViagem = (nivel: NivelAcessoViagem, outros404: CodigoErro[] = []) => {
   const decoradores = [
     ApiErro(
       404,
-      outroNaoEncontrado ? `${naoEncontrada}; ou ${outroNaoEncontrado}` : naoEncontrada,
-      'Viagem A3KD9F2P nao encontrada',
+      [CodigoErro.VIAGEM_NAO_ENCONTRADA, ...outros404],
+      'Viagem nao encontrada (ou voce nao participa dela) ou item inexistente nela',
     ),
   ];
 
   const motivo403 = MOTIVO_403[nivel];
   if (motivo403) {
-    decoradores.push(ApiErro(403, motivo403));
+    decoradores.push(ApiErro(403, motivo403[0], motivo403[1]));
   }
 
   return applyDecorators(...decoradores);
 };
-
-/** Rota com contrato definido, mas ainda sem implementacao: responde 501. */
-export const ApiNaoImplementado = () =>
-  ApiErro(501, 'Ainda nao implementado: o contrato acima e o planejado');

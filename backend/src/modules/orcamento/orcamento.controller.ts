@@ -1,6 +1,18 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { NivelAcesso, NivelAcessoViagem } from '../../common/decorators/nivel-acesso.decorator';
+import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
+import { CodigoErro } from '../../common/erros/codigos-erro';
 import { AcessoViagemGuard } from '../../common/guards/acesso-viagem.guard';
 import {
   ApiAcessoViagem,
@@ -8,6 +20,7 @@ import {
   ApiErroValidacao,
   ApiParamViagem,
 } from '../../common/swagger/api-respostas.decorator';
+import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
 import { DefinirOrcamentoDto } from './dto/definir-orcamento.dto';
 import { OrcamentoDto } from './dto/orcamento-resposta.dto';
 import { ResumoOrcamentoDto } from './dto/resumo-orcamento.dto';
@@ -24,20 +37,27 @@ export class OrcamentoController {
   @Get()
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiOperation({
-    summary: 'Consultar o orcamento da viagem',
-    description: 'Valores monetarios chegam como string.',
+    summary: 'Ver o orcamento da viagem',
+    description:
+      'Valor total, soma dos custos previstos das atividades e saldo. O previsto e ' +
+      'atualizado a cada atividade ou destino alterado.',
   })
   @ApiOkResponse({ type: OrcamentoDto })
-  @ApiAcessoViagem(NivelAcessoViagem.MEMBRO, 'a viagem ainda nao tem orcamento definido')
-  buscar(@Param('viagemId') viagemId: string) {
+  @ApiAcessoViagem(NivelAcessoViagem.MEMBRO, [CodigoErro.ORCAMENTO_NAO_DEFINIDO])
+  buscar(@Param('viagemId') viagemId: string): Promise<OrcamentoDto> {
     return this.orcamentoService.buscar(viagemId);
   }
 
   @Get('resumo')
   @NivelAcesso(NivelAcessoViagem.MEMBRO)
   @ApiOperation({
-    summary: 'RF17 - Painel de resumo financeiro',
-    description: 'Sem orcamento definido, o total fica em 0 e os percentuais tambem.',
+    summary: 'Ver o resumo financeiro da viagem',
+    description:
+      'Orcamento total, total planejado nas atividades, saldo disponivel e quanto cada ' +
+      'categoria de atividade consome do orcamento. Atividades sem custo previsto nao entram ' +
+      'na conta. Sem orcamento, `orcamentoDefinido` vem `false`, `orcamentoTotal` vem "0.00" ' +
+      'e os percentuais ficam em 0. O saldo e sempre orcamentoTotal menos totalPlanejado: ' +
+      'pode ser negativo, inclusive sem orcamento (ex.: planejado "130.25", saldo "-130.25").',
   })
   @ApiOkResponse({ type: ResumoOrcamentoDto })
   @ApiAcessoViagem(NivelAcessoViagem.MEMBRO)
@@ -48,13 +68,37 @@ export class OrcamentoController {
   @Put()
   @NivelAcesso(NivelAcessoViagem.EDITOR)
   @ApiOperation({
-    summary: 'RF15, RN02 - Definir o orcamento total da viagem',
-    description: 'Cria ou substitui o valor total. Exige EDITOR.',
+    summary: 'Definir o orcamento da viagem',
+    description: 'Cria o orcamento ou substitui o valor total ja definido. Exige EDITOR.',
   })
   @ApiOkResponse({ type: OrcamentoDto })
-  @ApiErroValidacao('valorTotal must not be less than 0')
+  @ApiErroValidacao(
+    'O orcamento total deve ser maior que zero',
+    'Informe o orcamento total como um numero com ate duas casas decimais (ex.: 12000.50)',
+  )
   @ApiAcessoViagem(NivelAcessoViagem.EDITOR)
-  definir(@Param('viagemId') viagemId: string, @Body() dto: DefinirOrcamentoDto) {
-    return this.orcamentoService.definir(viagemId, dto);
+  definir(
+    @Param('viagemId') viagemId: string,
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @Body() dto: DefinirOrcamentoDto,
+  ): Promise<OrcamentoDto> {
+    return this.orcamentoService.definir(viagemId, usuario, dto);
+  }
+
+  @Delete()
+  @NivelAcesso(NivelAcessoViagem.EDITOR)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Remover o orcamento da viagem',
+    description:
+      'Apaga o valor total definido; os custos previstos continuam nas atividades. Exige EDITOR.',
+  })
+  @ApiNoContentResponse({ description: 'Orcamento removido' })
+  @ApiAcessoViagem(NivelAcessoViagem.EDITOR, [CodigoErro.ORCAMENTO_NAO_DEFINIDO])
+  remover(
+    @Param('viagemId') viagemId: string,
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+  ): Promise<void> {
+    return this.orcamentoService.remover(viagemId, usuario);
   }
 }

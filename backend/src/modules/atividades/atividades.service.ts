@@ -1,167 +1,373 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
+import { Prisma, StatusAtividade, TipoNotificacao } from '@prisma/client';
 import { RespostaPaginada } from '../../common/dto/paginacao.dto';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { conflito, naoEncontrado, proibido, requisicaoInvalida } from '../../common/erros/erros';
+import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
+import { deDia } from '../../common/utils/formatos';
 import { PrismaService } from '../../prisma/prisma.service';
+import { travarViagem } from '../../prisma/travas';
+import { INCLUIR_AUTOR } from '../avaliacoes/avaliacoes.mapper';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { OrcamentoService } from '../orcamento/orcamento.service';
+import {
+  CONTAR_AVALIACOES,
+  INCLUIR_CATALOGO,
+  paraAtividadeDetalheDto,
+  paraAtividadeViagemDto,
+  paraAtividadeViagemListaDto,
+  paraCatalogoAtividadeDto,
+} from './atividades.mapper';
 import { AdicionarAtividadeViagemDto } from './dto/adicionar-atividade-viagem.dto';
+import {
+  AtividadeDetalheDto,
+  AtividadeViagemDto,
+  AtividadeViagemListaDto,
+  CatalogoAtividadeDto,
+} from './dto/atividade-resposta.dto';
 import { AtualizarAtividadeViagemDto } from './dto/atualizar-atividade-viagem.dto';
 import { BuscarAtividadesDto } from './dto/buscar-atividades.dto';
-import { CriarCatalogoAtividadeDto } from './dto/criar-catalogo-atividade.dto';
+import {
+  AtualizarCatalogoAtividadeDto,
+  CriarCatalogoAtividadeDto,
+} from './dto/criar-catalogo-atividade.dto';
+
+type Tx = Prisma.TransactionClient;
+
+/** Avaliacoes que a pagina publica traz junto; as demais vem paginadas. */
+const AVALIACOES_RECENTES = 20;
+
+/** Instante a partir do corpo: omitido mantem, null apaga, string vira Date. */
+function instanteDoCorpo(valor: string | null | undefined, atual: Date | null): Date | null {
+  if (valor === undefined) return atual;
+  if (valor === null) return null;
+
+  // O Date normalizaria 2027-02-31 para 3 de marco em silencio.
+  deDia(valor.slice(0, 10), 'dataHorario');
+  return new Date(valor);
+}
 
 @Injectable()
 export class AtividadesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orcamentoService: OrcamentoService,
+    private readonly notificacoes: NotificacoesService,
   ) {}
 
   // ---------------------- Catalogo global ----------------------
 
-  /** RF24, RN01 - catalogo publico com busca e filtros. */
+  /** Catalogo publico, ordenado pela melhor media. */
   async buscarNoCatalogo(filtros: BuscarAtividadesDto) {
+    const busca = filtros.busca?.trim();
+    const cidade = filtros.cidade?.trim();
+    const pais = filtros.pais?.trim();
+
     const where: Prisma.CatalogoAtividadeWhereInput = {
-      ...(filtros.busca && { nome: { contains: filtros.busca, mode: 'insensitive' } }),
+      ...(busca && { nome: { contains: busca, mode: 'insensitive' } }),
       ...(filtros.tipoAtividade && { tipoAtividade: filtros.tipoAtividade }),
-      ...(filtros.cidade && { cidade: { equals: filtros.cidade, mode: 'insensitive' } }),
-      ...(filtros.pais && { pais: { equals: filtros.pais, mode: 'insensitive' } }),
+      ...(cidade && { cidade: { equals: cidade, mode: 'insensitive' } }),
+      ...(pais && { pais: { equals: pais, mode: 'insensitive' } }),
       ...(filtros.notaMinima !== undefined && { mediaAvaliacao: { gte: filtros.notaMinima } }),
     };
 
     const [itens, total] = await this.prisma.$transaction([
       this.prisma.catalogoAtividade.findMany({
         where,
-        orderBy: [{ mediaAvaliacao: 'desc' }, { nome: 'asc' }],
+        include: CONTAR_AVALIACOES,
+        orderBy: [{ mediaAvaliacao: 'desc' }, { nome: 'asc' }, { id: 'asc' }],
         skip: filtros.pular,
         take: filtros.limite,
       }),
       this.prisma.catalogoAtividade.count({ where }),
     ]);
 
-    return new RespostaPaginada(itens, total, filtros);
+    return new RespostaPaginada(itens.map(paraCatalogoAtividadeDto), total, filtros);
   }
 
-  /** RF23 - pagina publica da atividade, com media e reviews. */
-  async buscarDoCatalogoPorId(id: number) {
+  /** As atividades mais bem avaliadas, entre as que ja tem avaliacao. */
+  async listarDestaques(limite = 10): Promise<CatalogoAtividadeDto[]> {
+    const atividades = await this.prisma.catalogoAtividade.findMany({
+      where: { avaliacoes: { some: {} } },
+      include: CONTAR_AVALIACOES,
+      orderBy: [{ mediaAvaliacao: 'desc' }, { avaliacoes: { _count: 'desc' } }, { id: 'asc' }],
+      take: limite,
+    });
+
+    return atividades.map(paraCatalogoAtividadeDto);
+  }
+
+  /** Pagina publica da atividade, com as avaliacoes mais recentes. */
+  async buscarDoCatalogo(id: number): Promise<AtividadeDetalheDto> {
     const atividade = await this.prisma.catalogoAtividade.findUnique({
       where: { id },
       include: {
+        ...CONTAR_AVALIACOES,
         avaliacoes: {
-          include: { usuario: { select: { id: true, nome: true } } },
-          orderBy: { criadoEm: 'desc' },
-          take: 20,
+          include: INCLUIR_AUTOR,
+          orderBy: [{ criadoEm: 'desc' }, { id: 'desc' }],
+          take: AVALIACOES_RECENTES,
         },
-        _count: { select: { avaliacoes: true } },
       },
     });
 
     if (!atividade) {
-      throw new NotFoundException('Atividade nao encontrada no catalogo');
+      throw this.atividadeDoCatalogoNaoEncontrada();
     }
 
-    return atividade;
+    return paraAtividadeDetalheDto(atividade);
   }
 
-  /** RF25 - atividades mais bem avaliadas para a pagina inicial. */
-  listarDestaques(limite = 10) {
-    return this.prisma.catalogoAtividade.findMany({
-      where: { avaliacoes: { some: {} } },
-      orderBy: { mediaAvaliacao: 'desc' },
-      take: limite,
-      include: { _count: { select: { avaliacoes: true } } },
+  async criarNoCatalogo(
+    usuarioId: number,
+    dto: CriarCatalogoAtividadeDto,
+  ): Promise<CatalogoAtividadeDto> {
+    const atividade = await this.prisma.catalogoAtividade.create({
+      data: { ...dto, fonte: 'manual', criadoPor: usuarioId },
+      include: CONTAR_AVALIACOES,
     });
+
+    return paraCatalogoAtividadeDto(atividade);
   }
 
-  criarNoCatalogo(dto: CriarCatalogoAtividadeDto) {
-    return this.prisma.catalogoAtividade.create({ data: dto });
+  async atualizarNoCatalogo(
+    usuarioId: number,
+    id: number,
+    dto: AtualizarCatalogoAtividadeDto,
+  ): Promise<CatalogoAtividadeDto> {
+    await this.garantirAutoria(usuarioId, id);
+
+    const atividade = await this.prisma.catalogoAtividade.update({
+      where: { id },
+      data: { ...dto, ...(dto.pais !== undefined && { codigoPais: null }) },
+      include: CONTAR_AVALIACOES,
+    });
+
+    return paraCatalogoAtividadeDto(atividade);
+  }
+
+  /**
+   * So sai do catalogo o que ninguem mais usa: nenhuma viagem agendou e
+   * ninguem alem do autor avaliou. Apagar levaria junto o trabalho de outras pessoas.
+   */
+  async removerDoCatalogo(usuarioId: number, id: number): Promise<void> {
+    await this.garantirAutoria(usuarioId, id);
+
+    const [usosEmViagens, avaliacoesDeOutros] = await Promise.all([
+      this.prisma.atividadeViagem.count({ where: { catalogoAtividadeId: id } }),
+      this.prisma.avaliacao.count({
+        where: { catalogoAtividadeId: id, usuarioId: { not: usuarioId } },
+      }),
+    ]);
+
+    if (usosEmViagens > 0 || avaliacoesDeOutros > 0) {
+      throw conflito(
+        CodigoErro.CATALOGO_EM_USO,
+        'A atividade esta em viagens ou tem avaliacoes de outras pessoas e nao pode ser excluida',
+      );
+    }
+
+    await this.prisma.catalogoAtividade.delete({ where: { id } });
   }
 
   // ------------------- Atividades de uma viagem ------------------
 
-  /** RF14 - atividades da viagem em ordem cronologica, agrupaveis por destino. */
-  listarDaViagem(viagemId: string, destinoViagemId?: number) {
-    return this.prisma.atividadeViagem.findMany({
-      where: {
-        destinoViagem: { viagemId },
-        ...(destinoViagemId && { destinoViagemId }),
-      },
-      include: {
-        catalogoAtividade: true,
-        destinoViagem: { include: { destinoCatalogo: { select: { id: true, nome: true } } } },
-      },
-      orderBy: [{ destinoViagem: { ordem: 'asc' } }, { dataHorario: 'asc' }],
-    });
-  }
-
-  /** RF12, RF13 - agenda a atividade e atualiza o previsto do orcamento (RF16). */
-  async adicionarNaViagem(viagemId: string, dto: AdicionarAtividadeViagemDto) {
-    await this.garantirDestinoDaViagem(viagemId, dto.destinoViagemId);
-
-    const atividade = await this.prisma.atividadeViagem.create({
-      data: {
-        destinoViagemId: dto.destinoViagemId,
-        catalogoAtividadeId: dto.catalogoAtividadeId,
-        dataHorario: dto.dataHorario ? new Date(dto.dataHorario) : null,
-        duracaoMin: dto.duracaoMin,
-        custoPrevisto: dto.custoPrevisto,
-        status: dto.status,
-      },
-      include: { catalogoAtividade: true },
-    });
-
-    await this.orcamentoService.recalcularPrevisto(viagemId);
-
-    return atividade;
-  }
-
-  async atualizarNaViagem(viagemId: string, atividadeId: number, dto: AtualizarAtividadeViagemDto) {
-    await this.garantirAtividadeDaViagem(viagemId, atividadeId);
-
-    if (dto.destinoViagemId) {
-      await this.garantirDestinoDaViagem(viagemId, dto.destinoViagemId);
+  /** Ordem cronologica por destino: ordem de visita, depois horario. */
+  async listarDaViagem(
+    viagemId: string,
+    destinoViagemId?: number,
+  ): Promise<AtividadeViagemListaDto[]> {
+    if (destinoViagemId !== undefined) {
+      await this.garantirDestinoDaViagem(this.prisma, viagemId, destinoViagemId);
     }
 
-    const atividade = await this.prisma.atividadeViagem.update({
-      where: { id: atividadeId },
-      data: {
-        destinoViagemId: dto.destinoViagemId,
-        dataHorario: dto.dataHorario ? new Date(dto.dataHorario) : undefined,
-        duracaoMin: dto.duracaoMin,
-        custoPrevisto: dto.custoPrevisto,
-        status: dto.status,
+    const atividades = await this.prisma.atividadeViagem.findMany({
+      where: {
+        destinoViagem: { viagemId },
+        ...(destinoViagemId !== undefined && { destinoViagemId }),
       },
-      include: { catalogoAtividade: true },
+      include: {
+        ...INCLUIR_CATALOGO,
+        destinoViagem: {
+          select: {
+            id: true,
+            ordem: true,
+            destinoCatalogo: true,
+          },
+        },
+      },
+      orderBy: [
+        { destinoViagem: { ordem: 'asc' } },
+        { dataHorario: { sort: 'asc', nulls: 'last' } },
+        { id: 'asc' },
+      ],
     });
 
-    await this.orcamentoService.recalcularPrevisto(viagemId);
+    return atividades.map(paraAtividadeViagemListaDto);
+  }
+
+  /** Agenda uma atividade do catalogo num destino e atualiza o previsto do orcamento. */
+  async adicionarNaViagem(
+    viagemId: string,
+    autor: UsuarioAutenticado,
+    dto: AdicionarAtividadeViagemDto,
+  ): Promise<AtividadeViagemDto> {
+    const dataHorario = instanteDoCorpo(dto.dataHorario, null);
+
+    return this.prisma.$transaction(async (tx) => {
+      await travarViagem(tx, viagemId);
+      await this.garantirDestinoDaViagem(tx, viagemId, dto.destinoViagemId);
+      const catalogo = await this.atividadeDoCatalogo(dto.catalogoAtividadeId, tx);
+
+      const atividade = await tx.atividadeViagem.create({
+        data: {
+          destinoViagemId: dto.destinoViagemId,
+          catalogoAtividadeId: catalogo.id,
+          dataHorario,
+          duracaoMin: dto.duracaoMin ?? null,
+          custoPrevisto: dto.custoPrevisto ?? null,
+          status: dto.status ?? StatusAtividade.PENDENTE,
+        },
+        include: INCLUIR_CATALOGO,
+      });
+
+      await this.orcamentoService.recalcularPrevisto(tx, viagemId);
+      await this.notificacoes.registrar(tx, {
+        viagemId,
+        autorId: autor.id,
+        tipo: TipoNotificacao.ATIVIDADE_ADICIONADA,
+        mensagem: (nomeViagem) => `${autor.nome} adicionou ${catalogo.nome} a ${nomeViagem}`,
+      });
+
+      return paraAtividadeViagemDto(atividade);
+    });
+  }
+
+  async atualizarNaViagem(
+    viagemId: string,
+    atividadeId: number,
+    autor: UsuarioAutenticado,
+    dto: AtualizarAtividadeViagemDto,
+  ): Promise<AtividadeViagemDto> {
+    return this.prisma.$transaction(async (tx) => {
+      await travarViagem(tx, viagemId);
+      const atual = await this.atividadeDaViagem(tx, viagemId, atividadeId);
+
+      if (dto.destinoViagemId !== undefined) {
+        await this.garantirDestinoDaViagem(tx, viagemId, dto.destinoViagemId);
+      }
+
+      const atividade = await tx.atividadeViagem.update({
+        where: { id: atividadeId },
+        data: {
+          destinoViagemId: dto.destinoViagemId,
+          dataHorario: instanteDoCorpo(dto.dataHorario, atual.dataHorario),
+          duracaoMin: dto.duracaoMin,
+          custoPrevisto: dto.custoPrevisto,
+          status: dto.status,
+        },
+        include: INCLUIR_CATALOGO,
+      });
+
+      await this.orcamentoService.recalcularPrevisto(tx, viagemId);
+      await this.notificacoes.registrar(tx, {
+        viagemId,
+        autorId: autor.id,
+        tipo: TipoNotificacao.ATIVIDADE_ATUALIZADA,
+        mensagem: (nomeViagem) =>
+          `${autor.nome} atualizou ${atividade.catalogoAtividade.nome} em ${nomeViagem}`,
+      });
+
+      return paraAtividadeViagemDto(atividade);
+    });
+  }
+
+  async removerDaViagem(
+    viagemId: string,
+    atividadeId: number,
+    autor: UsuarioAutenticado,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await travarViagem(tx, viagemId);
+      const atividade = await this.atividadeDaViagem(tx, viagemId, atividadeId);
+
+      await tx.atividadeViagem.delete({ where: { id: atividadeId } });
+      await this.orcamentoService.recalcularPrevisto(tx, viagemId);
+      await this.notificacoes.registrar(tx, {
+        viagemId,
+        autorId: autor.id,
+        tipo: TipoNotificacao.ATIVIDADE_REMOVIDA,
+        mensagem: (nomeViagem) =>
+          `${autor.nome} removeu ${atividade.catalogoAtividade.nome} de ${nomeViagem}`,
+      });
+    });
+  }
+
+  // --------------------------- Apoio ---------------------------
+
+  private atividadeDoCatalogoNaoEncontrada() {
+    return naoEncontrado(
+      CodigoErro.ATIVIDADE_CATALOGO_NAO_ENCONTRADA,
+      'Atividade nao encontrada no catalogo',
+    );
+  }
+
+  private async atividadeDoCatalogo(id: number, tx: Tx = this.prisma) {
+    const atividade = await tx.catalogoAtividade.findUnique({
+      where: { id },
+      select: { id: true, nome: true, criadoPor: true },
+    });
+
+    if (!atividade) {
+      throw this.atividadeDoCatalogoNaoEncontrada();
+    }
 
     return atividade;
   }
 
-  async removerDaViagem(viagemId: string, atividadeId: number) {
-    await this.garantirAtividadeDaViagem(viagemId, atividadeId);
-    await this.prisma.atividadeViagem.delete({ where: { id: atividadeId } });
-    await this.orcamentoService.recalcularPrevisto(viagemId);
+  /** So quem cadastrou altera; itens sem autor (seed, conta excluida) ficam fixos. */
+  private async garantirAutoria(usuarioId: number, id: number) {
+    const atividade = await this.atividadeDoCatalogo(id);
+
+    if (atividade.criadoPor !== usuarioId) {
+      throw proibido(
+        CodigoErro.APENAS_QUEM_CADASTROU,
+        'So quem cadastrou esta atividade pode altera-la ou exclui-la',
+      );
+    }
   }
 
-  private async garantirDestinoDaViagem(viagemId: string, destinoViagemId: number) {
-    const destino = await this.prisma.destinoViagem.findUnique({
+  /** Impede vincular atividades a destinos de outras viagens. */
+  private async garantirDestinoDaViagem(tx: Tx, viagemId: string, destinoViagemId: number) {
+    const destino = await tx.destinoViagem.findUnique({
       where: { id: destinoViagemId },
       select: { viagemId: true },
     });
 
     if (!destino || destino.viagemId !== viagemId) {
-      throw new BadRequestException('O destino informado nao pertence a esta viagem');
+      throw requisicaoInvalida(
+        CodigoErro.DESTINO_DE_OUTRA_VIAGEM,
+        'O destino informado nao pertence a esta viagem',
+      );
     }
   }
 
-  private async garantirAtividadeDaViagem(viagemId: string, atividadeId: number) {
-    const atividade = await this.prisma.atividadeViagem.findUnique({
+  private async atividadeDaViagem(tx: Tx, viagemId: string, atividadeId: number) {
+    const atividade = await tx.atividadeViagem.findUnique({
       where: { id: atividadeId },
-      select: { destinoViagem: { select: { viagemId: true } } },
+      include: {
+        destinoViagem: { select: { viagemId: true } },
+        catalogoAtividade: { select: { nome: true } },
+      },
     });
 
     if (!atividade || atividade.destinoViagem.viagemId !== viagemId) {
-      throw new NotFoundException('Atividade nao encontrada nesta viagem');
+      throw naoEncontrado(
+        CodigoErro.ATIVIDADE_NAO_ENCONTRADA,
+        'Atividade nao encontrada nesta viagem',
+      );
     }
+
+    return atividade;
   }
 }

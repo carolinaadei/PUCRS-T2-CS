@@ -1,75 +1,89 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
-  NotImplementedException,
+  Param,
   Patch,
+  Post,
+  Query,
 } from '@nestjs/common';
-import {
-  ApiNoContentResponse,
-  ApiOkResponse,
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { ParseIdPipe } from '../../common/pipes/parse-id.pipe';
 import {
   ApiAutenticado,
   ApiErro,
-  ApiNaoImplementado,
+  ApiErroValidacao,
+  ApiParamId,
 } from '../../common/swagger/api-respostas.decorator';
-import { NotificacaoDto, PaginaNotificacoesDto } from './dto/notificacao.dto';
+import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
+import { BuscarNotificacoesDto } from './dto/buscar-notificacoes.dto';
+import {
+  ContagemNotificacoesDto,
+  MarcacaoEmLoteDto,
+  MarcarNotificacaoDto,
+  NotificacaoDto,
+  PaginaNotificacoesDto,
+} from './dto/notificacao.dto';
+import { NotificacoesService } from './notificacoes.service';
 
-const PENDENTE = 'RF21 ainda nao implementado';
-
-/**
- * RF21 - contrato planejado das notificacoes in-app. As rotas respondem 501
- * ate existirem a tabela e a emissao dos eventos (ver notificacoes.module.ts).
- */
 @ApiTags('Notificacoes')
 @ApiAutenticado()
-@ApiNaoImplementado()
 @Controller('notificacoes')
 export class NotificacoesController {
+  constructor(private readonly notificacoesService: NotificacoesService) {}
+
   @Get()
   @ApiOperation({
-    summary: 'RF21 - Listar minhas notificacoes (nao implementado)',
-    description: 'Alteracoes relevantes nas viagens do usuario, mais recentes primeiro.',
+    summary: 'Listar minhas notificacoes',
+    description:
+      'Alteracoes feitas por outras pessoas nas viagens de que voce participa, mais recentes ' +
+      'primeiro. Voce nao e notificado do que voce mesmo fez.',
   })
-  @ApiQuery({ name: 'apenasNaoLidas', required: false, type: Boolean, example: true })
-  @ApiQuery({ name: 'pagina', required: false, type: Number, example: 1 })
-  @ApiQuery({ name: 'limite', required: false, type: Number, example: 20 })
   @ApiOkResponse({ type: PaginaNotificacoesDto })
-  listar(): never {
-    throw new NotImplementedException(PENDENTE);
+  @ApiErroValidacao('O filtro apenasNaoLidas deve ser verdadeiro ou falso')
+  listar(@UsuarioAtual() usuario: UsuarioAutenticado, @Query() filtro: BuscarNotificacoesDto) {
+    return this.notificacoesService.listarDoUsuario(usuario.id, filtro);
   }
 
-  @Patch('lidas')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @Get('contagem')
   @ApiOperation({
-    summary: 'RF21 - Marcar todas como lidas (nao implementado)',
-    description: 'Marca como lidas todas as notificacoes do usuario.',
+    summary: 'Contar notificacoes nao lidas',
+    description: 'Para o contador do sino, sem trazer a lista.',
   })
-  @ApiNoContentResponse({ description: 'Notificacoes marcadas como lidas' })
-  marcarTodasComoLidas(): never {
-    throw new NotImplementedException(PENDENTE);
+  @ApiOkResponse({ type: ContagemNotificacoesDto })
+  contar(@UsuarioAtual() usuario: UsuarioAutenticado): Promise<ContagemNotificacoesDto> {
+    return this.notificacoesService.contar(usuario.id);
   }
 
-  @Patch(':notificacaoId/lida')
+  @Post('marcar-como-lidas')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'RF21 - Marcar notificacao como lida (nao implementado)',
-    description: 'So o destinatario pode marcar a propria notificacao.',
+    summary: 'Marcar todas como lidas',
+    description: 'Marca como lidas todas as suas notificacoes ainda nao lidas.',
   })
-  @ApiParam({
-    name: 'notificacaoId',
-    type: Number,
-    description: 'Id da notificacao',
-    example: 15,
+  @ApiOkResponse({ type: MarcacaoEmLoteDto })
+  marcarTodas(@UsuarioAtual() usuario: UsuarioAutenticado): Promise<MarcacaoEmLoteDto> {
+    return this.notificacoesService.marcarTodasComoLidas(usuario.id);
+  }
+
+  @Patch(':notificacaoId')
+  @ApiParamId('notificacaoId', 'Id da notificacao')
+  @ApiOperation({
+    summary: 'Marcar uma notificacao como lida ou nao lida',
+    description: 'So o destinatario pode alterar a propria notificacao.',
   })
   @ApiOkResponse({ type: NotificacaoDto })
-  @ApiErro(404, 'Notificacao nao encontrada')
-  marcarComoLida(): never {
-    throw new NotImplementedException(PENDENTE);
+  @ApiErroValidacao('O campo lida deve ser verdadeiro ou falso')
+  @ApiErro(404, CodigoErro.NOTIFICACAO_NAO_ENCONTRADA, 'Notificacao nao encontrada')
+  marcar(
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @Param('notificacaoId', ParseIdPipe) notificacaoId: number,
+    @Body() dto: MarcarNotificacaoDto,
+  ): Promise<NotificacaoDto> {
+    return this.notificacoesService.marcar(usuario.id, notificacaoId, dto.lida);
   }
 }

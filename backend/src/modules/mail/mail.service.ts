@@ -1,61 +1,31 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { FilaEmailsService } from '../../aws/fila-emails.service';
+import { MensagemEmail, PROVEDOR_EMAIL, ProvedorEmail } from './mensagem-email';
 
-const URL_API_BREVO = 'https://api.brevo.com/v3/smtp/email';
-
-interface Destinatario {
-  email: string;
-  nome?: string;
-}
-
+/**
+ * Porta de saida de e-mails da API. Com a fila SQS configurada, so enfileira -
+ * a requisicao nao espera o provedor, e uma falha de envio vira nova tentativa
+ * no worker em vez de e-mail perdido. Sem fila, entrega na hora.
+ */
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly fila: FilaEmailsService,
+    @Inject(PROVEDOR_EMAIL) private readonly provedor: ProvedorEmail,
+  ) {}
 
-  /**
-   * Envia um e-mail transacional pela API do Brevo.
-   * Lanca em caso de falha; quem chama decide se o erro e fatal para a requisicao.
-   */
-  async enviarEmail(
-    destinatario: Destinatario,
-    assunto: string,
-    htmlConteudo: string,
-  ): Promise<void> {
-    const apiKey = this.configService.get<string>('mail.brevoApiKey')!;
-    const remetenteEmail = this.configService.get<string>('mail.remetenteEmail')!;
-    const remetenteNome = this.configService.get<string>('mail.remetenteNome')!;
-
-    // Em desenvolvimento as chaves do Brevo sao opcionais. Sem elas, dizemos o que
-    // houve em vez de chamar a API e receber um 401 dificil de interpretar.
-    if (!apiKey || !remetenteEmail) {
-      throw new Error(
-        'Brevo nao configurado (BREVO_API_KEY / BREVO_SENDER_EMAIL ausentes): e-mail nao enviado',
-      );
+  async enviar(mensagem: MensagemEmail): Promise<void> {
+    if (this.fila.ativa) {
+      await this.fila.publicar(mensagem);
+      this.logger.log(`E-mail "${mensagem.assunto}" enfileirado para ${mensagem.para.email}`);
+      return;
     }
 
-    const resposta = await fetch(URL_API_BREVO, {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        sender: { email: remetenteEmail, name: remetenteNome },
-        to: [{ email: destinatario.email, name: destinatario.nome }],
-        subject: assunto,
-        htmlContent: htmlConteudo,
-      }),
-    });
-
-    if (!resposta.ok) {
-      // O corpo do erro do Brevo traz `code`/`message`, uteis no diagnostico.
-      const detalhe = await resposta.text();
-      throw new Error(`Brevo respondeu ${resposta.status}: ${detalhe}`);
-    }
-
-    this.logger.log(`E-mail "${assunto}" enviado para ${destinatario.email}`);
+    await this.provedor.enviar(mensagem);
+    this.logger.log(
+      `E-mail "${mensagem.assunto}" entregue a ${mensagem.para.email} via ${this.provedor.nome}`,
+    );
   }
 }

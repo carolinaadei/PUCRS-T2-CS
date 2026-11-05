@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { NotificacoesController } from './notificacoes.controller';
+import { NotificacoesService } from './notificacoes.service';
 
-// TODO (RF21 - prioridade Media): notificacoes in-app para colaboradores quando
-// houver alteracoes relevantes na viagem. O contrato ja esta no controller;
-// falta a tabela propria e a emissao dos eventos (avaliar o EventEmitter do Nest).
+/** Global: todo modulo que altera uma viagem registra as notificacoes dela. */
+@Global()
 @Module({
   controllers: [NotificacoesController],
+  providers: [NotificacoesService],
+  exports: [NotificacoesService],
 })
 export class NotificacoesModule {}

@@ -16,5 +16,6 @@ O **ViajaJunto** propõe o desenvolvimento de uma aplicação web de planejament
 
 | Membro | E-mail | Github |
 |--------|--------|--------|
-| Gustavo de Freitas Fidélis | gustavo.fidelis@edu.pucrs.br | [gustavofid](https://github.com/gustavofid) |
-| Bernardo Lykawka Medeiros da Silva | bernardo.lykawka@edu.pucrs.br | [bernardolykawka](https://github.com/bernardolykawka) |
+| Carolina De Souza Gonçalves | carolina.g@edu.pucrs.br | [carolinaadei](https://github.com/carolinaadei) |
+| Jully Anne Seyffert da Silva Jara | jully.j@edu.pucrs.br | [jullySeyffert](https://github.com/jullySeyffert) |
+| Rafael Meira Kreutz | rafael.kreutz003@edu.pucrs.br | [RafaelKreutz](https://github.com/RafaelKreutz) |

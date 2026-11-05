@@ -1,7 +1,10 @@
-import { OmitType, PartialType } from '@nestjs/swagger';
+import { OmitType } from '@nestjs/swagger';
 import { AdicionarDestinoViagemDto } from './adicionar-destino-viagem.dto';
 
-/** O destino do catalogo nao muda: para trocar, remova e adicione outro. */
-export class AtualizarDestinoViagemDto extends PartialType(
-  OmitType(AdicionarDestinoViagemDto, ['destinoCatalogoId'] as const),
-) {}
+/**
+ * Datas, descricao e posicao no roteiro. Envie so o que muda; `null` apaga
+ * chegada, saida ou descricao. Para trocar a cidade, remova e adicione outro.
+ */
+export class AtualizarDestinoViagemDto extends OmitType(AdicionarDestinoViagemDto, [
+  'destinoCatalogoId',
+] as const) {}

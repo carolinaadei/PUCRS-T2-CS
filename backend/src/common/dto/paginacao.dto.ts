@@ -2,20 +2,20 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-/** Parametros de paginacao reutilizaveis nas listagens (RF06, RF24). */
+/** Parametros de paginacao reutilizaveis nas listagens. */
 export class PaginacaoDto {
   @ApiPropertyOptional({ default: 1, minimum: 1, description: 'Pagina desejada' })
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'A pagina deve ser um numero inteiro' })
+  @Min(1, { message: 'A pagina deve ser no minimo 1' })
   @IsOptional()
   pagina: number = 1;
 
   @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100, description: 'Itens por pagina' })
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
+  @IsInt({ message: 'O limite deve ser um numero inteiro' })
+  @Min(1, { message: 'O limite deve ser no minimo 1' })
+  @Max(100, { message: 'O limite deve ser no maximo 100' })
   @IsOptional()
   limite: number = 20;
 

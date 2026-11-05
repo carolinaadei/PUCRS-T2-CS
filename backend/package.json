@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "demo": "node scripts/demo.mjs",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -16,16 +17,18 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "db:up": "docker compose --env-file .env -f ../docker-compose.yml up -d --wait postgres",
+    "db:down": "docker compose --env-file .env -f ../docker-compose.yml stop postgres",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
-    "test:integracao": "jest --config ./test/jest-e2e.json --runInBand integracao",
+    "test:integracao": "jest --config ./test/jest-e2e.json --runInBand test/integracao",
     "test:cov:e2e": "jest --config ./test/jest-e2e.json --runInBand --coverage",
-    "openapi:gerar": "ts-node -P tsconfig.json scripts/gerar-openapi.ts"
+    "openapi:gerar": "ts-node -P tsconfig.json scripts/gerar-openapi.ts",
+    "infra:up": "docker compose --env-file .env -f ../docker-compose.yml up -d --wait ministack && docker compose --env-file .env -f ../docker-compose.yml run --rm provisionar",
+    "start:worker": "nest start --entryFile worker"
   },
   "_comentario_overrides": [
     "Correcoes de seguranca em dependencias transitivas que o Trivy acusa como",
@@ -38,6 +41,12 @@
     "deepmerge-ts": "^8.0.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/client-secrets-manager": "^3.1161.0",
+    "@aws-sdk/client-sesv2": "^3.1161.0",
+    "@aws-sdk/client-sqs": "^3.1161.0",
+    "@aws-sdk/client-ssm": "^3.1161.0",
+    "@aws-sdk/s3-presigned-post": "^3.1161.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",

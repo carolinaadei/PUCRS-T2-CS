@@ -4,8 +4,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { CHAVE_ROTA_PUBLICA } from '../decorators/publico.decorator';
 
 /**
- * Guard global de autenticacao (RNF03). Rotas anotadas com @Publico()
- * seguem acessiveis a visitantes (RN01).
+ * Guard global de autenticacao. Rotas anotadas com @Publico()
+ * seguem acessiveis a visitantes.
  */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {

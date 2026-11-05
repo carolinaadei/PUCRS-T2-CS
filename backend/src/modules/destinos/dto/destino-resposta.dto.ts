@@ -1,9 +1,10 @@
+import { OrigemLugarDto } from '../../../geoapify/geoapify.dto';
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { CategoriaDestino } from '@prisma/client';
 import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
 
-/** RF09 - destino (cidade) do catalogo global. */
-export class DestinoCatalogoDto {
+/** Destino (cidade) do catalogo global. */
+export class DestinoCatalogoDto extends OrigemLugarDto {
   @ApiProperty({ example: 1 })
   id!: number;
 
@@ -13,10 +14,19 @@ export class DestinoCatalogoDto {
   @ApiProperty({ type: String, nullable: true, example: 'Portugal' })
   pais!: string | null;
 
-  @ApiProperty({ enum: CategoriaDestino, nullable: true, example: CategoriaDestino.CIDADE })
+  @ApiProperty({
+    enum: CategoriaDestino,
+    enumName: 'CategoriaDestino',
+    nullable: true,
+    example: CategoriaDestino.CIDADE,
+  })
   categoria!: CategoriaDestino | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Capital portuguesa, a beira do Tejo' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Capital portuguesa, entre miradouros e o Tejo.',
+  })
   descricao!: string | null;
 
   @ApiProperty({ type: Number, nullable: true, example: 38.7223 })
@@ -25,13 +35,29 @@ export class DestinoCatalogoDto {
   @ApiProperty({ type: Number, nullable: true, example: -9.1393 })
   longitude!: number | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'https://exemplo.com/lisboa.jpg' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   fotoUrl!: string | null;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 1,
+    description: 'Quem cadastrou (so essa pessoa edita ou exclui); null nos itens do sistema',
+  })
+  criadoPor!: number | null;
+
+  @ApiProperty({ example: '2026-09-15T10:00:00.000Z' })
+  criadoEm!: Date;
 }
 
 export class DestinoCatalogoResumoDto extends PickType(DestinoCatalogoDto, [
   'id',
   'nome',
+  'pais',
+  'fonte',
+  'idExterno',
+  'codigoPais',
+  'atribuicoes',
 ] as const) {}
 
 export class PaginaDestinosDto extends PaginaBaseDto {
@@ -39,27 +65,36 @@ export class PaginaDestinosDto extends PaginaBaseDto {
   itens!: DestinoCatalogoDto[];
 }
 
-/** Campos proprios do destino dentro de uma viagem (RF08). */
+/** Destino em destaque: media das avaliacoes das atividades feitas nele. */
+export class DestinoDestaqueDto extends DestinoCatalogoDto {
+  @ApiProperty({ example: 4.6, description: 'Media de 1 a 5, com uma casa decimal' })
+  mediaAvaliacao!: number;
+
+  @ApiProperty({ example: 12, description: 'Avaliacoes que entraram na media' })
+  totalAvaliacoes!: number;
+}
+
+/** Campos proprios do destino dentro de uma viagem. */
 export class DestinoViagemBaseDto {
-  @ApiProperty({ example: 4, description: 'Id do destino na viagem: e o {destinoId}' })
+  @ApiProperty({ example: 1, description: 'Id do destino na viagem: e o {destinoId}' })
   id!: number;
 
-  @ApiProperty({ example: 'A3KD9F2P' })
+  @ApiProperty({ example: 'DEMO2027' })
   viagemId!: string;
 
   @ApiProperty({ example: 1 })
   destinoCatalogoId!: number;
 
-  @ApiProperty({ type: Date, nullable: true, example: '2027-01-10T00:00:00.000Z' })
-  chegada!: Date | null;
+  @ApiProperty({ type: String, format: 'date', nullable: true, example: '2027-01-10' })
+  chegada!: string | null;
 
-  @ApiProperty({ type: Date, nullable: true, example: '2027-01-14T00:00:00.000Z' })
-  saida!: Date | null;
+  @ApiProperty({ type: String, format: 'date', nullable: true, example: '2027-01-16' })
+  saida!: string | null;
 
-  @ApiProperty({ type: String, nullable: true, example: 'Ficar no bairro de Alfama' })
+  @ApiProperty({ type: String, nullable: true, example: null })
   descricao!: string | null;
 
-  @ApiProperty({ example: 0, description: 'Ordem de visita, a partir de 0' })
+  @ApiProperty({ example: 0, description: 'Posicao no roteiro, de 0 a n-1' })
   ordem!: number;
 }
 
@@ -68,12 +103,12 @@ export class DestinoViagemDto extends DestinoViagemBaseDto {
   destinoCatalogo!: DestinoCatalogoDto;
 }
 
-export class ContagemAtividadesDto {
-  @ApiProperty({ example: 3 })
+export class TotaisDestinoDto {
+  @ApiProperty({ example: 1 })
   atividades!: number;
 }
 
 export class DestinoViagemListaDto extends DestinoViagemDto {
-  @ApiProperty({ type: ContagemAtividadesDto })
-  _count!: ContagemAtividadesDto;
+  @ApiProperty({ type: TotaisDestinoDto })
+  totais!: TotaisDestinoDto;
 }

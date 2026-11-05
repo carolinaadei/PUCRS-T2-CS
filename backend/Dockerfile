@@ -38,12 +38,27 @@ RUN npm ci --ignore-scripts
 # O schema vem antes do resto do codigo: enquanto ele nao muda, o generate
 # (que baixa engines) reaproveita a camada em cache.
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npm run prisma:generate
 
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
 
 RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Estagio auxiliar: migrations e seed (servico `migrar` do docker-compose.yml)
+# ---------------------------------------------------------------------------
+# Herda o build, que ja tem o CLI do Prisma e o ts-node (o seed e TypeScript).
+# Nunca vai para o registro: o CI constroi so o ultimo estagio (runtime), e o
+# BuildKit pula os estagios de que o alvo nao depende.
+FROM build AS ferramentas
+
+# Baixa o schema engine na construcao da imagem: sem isto o `migrate deploy`
+# o buscaria na internet (binaries.prisma.sh) a cada `docker compose up`.
+RUN npx prisma version > /dev/null
+
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
 
 # ---------------------------------------------------------------------------
 # Estagio 3: runtime
@@ -93,10 +108,12 @@ USER node
 
 EXPOSE 3000
 
-# `/api/health` responde 200 mesmo com o banco fora do ar (status: degradado),
-# entao aqui ele mede a API, nao o Postgres - que e o que um healthcheck de
-# container deve medir.
+# A sonda de vida (`/api/health/live`) nao toca no banco: mede o processo, que e
+# o que um healthcheck de container deve medir. Banco fora do ar e assunto do
+# `/api/health/ready`, que tira a instancia do balanceador sem reinicia-la.
+# O worker usa esta mesma imagem (`node dist/worker`) e nao abre porta; no
+# compose ele desliga este healthcheck.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/main"]

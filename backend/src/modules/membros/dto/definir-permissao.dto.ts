@@ -2,12 +2,17 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PermissaoMembro } from '@prisma/client';
 import { IsEnum } from 'class-validator';
 
-/** RF19, RF20 - nivel de permissao do colaborador. */
+/** Define o nivel de permissao do colaborador na viagem. */
 export class DefinirPermissaoDto {
   @ApiProperty({
     enum: PermissaoMembro,
-    description: 'EDITOR pode alterar a viagem (RN02); VISUALIZADOR e somente leitura (RN03)',
+    example: PermissaoMembro.EDITOR,
+    description:
+      'EDITOR pode adicionar, editar e remover destinos, atividades e orcamento; ' +
+      'VISUALIZADOR tem acesso somente leitura',
   })
-  @IsEnum(PermissaoMembro)
+  @IsEnum(PermissaoMembro, {
+    message: 'Permissao invalida: use EDITOR ou VISUALIZADOR',
+  })
   permissao!: PermissaoMembro;
 }

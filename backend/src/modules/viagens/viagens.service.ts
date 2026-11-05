@@ -1,125 +1,199 @@
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import { Prisma, StatusViagem } from '@prisma/client';
-import { randomInt } from 'node:crypto';
-import { PaginacaoDto, RespostaPaginada } from '../../common/dto/paginacao.dto';
+import { Injectable } from '@nestjs/common';
+import { Prisma, StatusViagem, TipoNotificacao } from '@prisma/client';
+import { RespostaPaginada } from '../../common/dto/paginacao.dto';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { requisicaoInvalida } from '../../common/erros/erros';
+import { PapelNaViagem, UsuarioAutenticado } from '../../common/types/usuario-autenticado';
+import { comCodigoUnico, gerarCodigo } from '../../common/utils/codigo';
+import { dataDoCorpo } from '../../common/utils/formatos';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AtualizarViagemDto } from './dto/atualizar-viagem.dto';
-import { CriarViagemDto } from './dto/criar-viagem.dto';
-
-/** Alfabeto sem caracteres ambiguos (0/O, 1/I) para o codigo ser ditado sem erro. */
-const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const TAMANHO_CODIGO = 8;
-const MAX_TENTATIVAS_CODIGO = 5;
+import { travarViagem } from '../../prisma/travas';
+import { paraDestinoViagemDto } from '../destinos/destinos.mapper';
+import { INCLUIR_USUARIO, paraMembroDto } from '../membros/membros.mapper';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
+import { paraOrcamentoDto } from '../orcamento/orcamento.service';
+import { BuscarViagensDto } from './dto/buscar-viagens.dto';
+import { AtualizarViagemDto, CriarViagemDto } from './dto/criar-viagem.dto';
+import { ViagemDetalheDto, ViagemDto, ViagemResumoDto } from './dto/viagem-resposta.dto';
+import { paraViagemDto } from './viagens.mapper';
 
 @Injectable()
 export class ViagensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificacoes: NotificacoesService,
+  ) {}
 
-  /** RF04 - cria a viagem gerando o codigo de convite usado no RF18. */
-  async criar(usuarioId: number, dto: CriarViagemDto) {
-    // Colisao de codigo e improvavel, mas nao impossivel: tentamos novamente.
-    for (let tentativa = 0; tentativa < MAX_TENTATIVAS_CODIGO; tentativa++) {
-      try {
-        return await this.prisma.viagem.create({
-          data: {
-            id: this.gerarCodigoConvite(),
-            nome: dto.nome.trim(),
-            descricao: dto.descricao,
-            dataInicio: dto.dataInicio ? new Date(dto.dataInicio) : null,
-            dataFim: dto.dataFim ? new Date(dto.dataFim) : null,
-            status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,
-            criadoPor: usuarioId,
-          },
-        });
-      } catch (erro) {
-        const ehColisaoDeCodigo =
-          erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002';
+  /** Cria a viagem com id e codigo de convite aleatorios e independentes. */
+  async criar(usuarioId: number, dto: CriarViagemDto): Promise<ViagemDto> {
+    const dataInicio = dataDoCorpo(dto.dataInicio, null, 'inicio');
+    const dataFim = dataDoCorpo(dto.dataFim, null, 'fim');
+    this.validarPeriodo(dataInicio, dataFim);
 
-        if (!ehColisaoDeCodigo) {
-          throw erro;
-        }
-      }
-    }
+    const viagem = await comCodigoUnico(() =>
+      this.prisma.viagem.create({
+        data: {
+          id: gerarCodigo(),
+          codigoConvite: gerarCodigo(),
+          nome: dto.nome,
+          descricao: dto.descricao ?? null,
+          dataInicio,
+          dataFim,
+          status: dto.status ?? StatusViagem.EM_PLANEJAMENTO,
+          criadoPor: usuarioId,
+        },
+      }),
+    );
 
-    throw new InternalServerErrorException('Nao foi possivel gerar um codigo de convite unico');
+    return paraViagemDto(viagem, 'CRIADOR');
   }
 
-  /**
-   * RF06 - painel pessoal: viagens criadas pelo usuario e aquelas em que
-   * ele foi convidado como colaborador (RN06).
-   */
-  async listarDoUsuario(usuarioId: number, paginacao: PaginacaoDto) {
-    const filtro: Prisma.ViagemWhereInput = {
+  /** Painel pessoal: viagens criadas pelo usuario e aquelas em que colabora. */
+  async listarDoUsuario(usuarioId: number, filtro: BuscarViagensDto) {
+    const where: Prisma.ViagemWhereInput = {
       OR: [{ criadoPor: usuarioId }, { membros: { some: { usuarioId } } }],
+      ...(filtro.status && { status: filtro.status }),
     };
 
-    const [itens, total] = await this.prisma.$transaction([
+    const [viagens, total] = await this.prisma.$transaction([
       this.prisma.viagem.findMany({
-        where: filtro,
-        orderBy: [{ dataInicio: 'asc' }, { criadoEm: 'desc' }],
-        skip: paginacao.pular,
-        take: paginacao.limite,
+        where,
+        orderBy: [{ dataInicio: { sort: 'asc', nulls: 'last' } }, { criadoEm: 'desc' }],
+        skip: filtro.pular,
+        take: filtro.limite,
         include: {
+          membros: { where: { usuarioId }, select: { permissao: true } },
           _count: { select: { membros: true, destinos: true } },
         },
       }),
-      this.prisma.viagem.count({ where: filtro }),
+      this.prisma.viagem.count({ where }),
     ]);
 
-    return new RespostaPaginada(itens, total, paginacao);
+    const itens = viagens.map((viagem): ViagemResumoDto => ({
+      ...paraViagemDto(
+        viagem,
+        viagem.criadoPor === usuarioId ? 'CRIADOR' : viagem.membros[0].permissao,
+      ),
+      totais: { colaboradores: viagem._count.membros, destinos: viagem._count.destinos },
+    }));
+
+    return new RespostaPaginada(itens, total, filtro);
   }
 
-  /** Detalhe da viagem. O acesso ja foi validado pelo AcessoViagemGuard (RN06). */
-  async buscarPorId(viagemId: string) {
-    const viagem = await this.prisma.viagem.findUnique({
+  /** Viagem completa. O acesso ja foi validado pelo AcessoViagemGuard. */
+  async buscarDetalhe(viagemId: string, papel: PapelNaViagem): Promise<ViagemDetalheDto> {
+    const viagem = await this.prisma.viagem.findUniqueOrThrow({
       where: { id: viagemId },
       include: {
         criador: { select: { id: true, nome: true, email: true } },
-        membros: {
-          include: { usuario: { select: { id: true, nome: true, email: true } } },
-          orderBy: { entrouEm: 'asc' },
-        },
+        membros: { include: INCLUIR_USUARIO, orderBy: [{ entrouEm: 'asc' }, { id: 'asc' }] },
         destinos: {
           include: { destinoCatalogo: true },
-          orderBy: { ordem: 'asc' },
+          orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
         },
         orcamento: true,
       },
     });
 
-    if (!viagem) {
-      throw new NotFoundException(`Viagem ${viagemId} nao encontrada`);
-    }
-
-    return viagem;
+    return {
+      ...paraViagemDto(viagem, papel),
+      criador: viagem.criador,
+      membros: viagem.membros.map(paraMembroDto),
+      destinos: viagem.destinos.map(paraDestinoViagemDto),
+      orcamento: viagem.orcamento && paraOrcamentoDto(viagem.orcamento),
+    };
   }
 
-  /** RF05, RF07 - editar dados e status da viagem (exige EDITOR, RN02). */
-  atualizar(viagemId: string, dto: AtualizarViagemDto) {
-    return this.prisma.viagem.update({
-      where: { id: viagemId },
-      data: {
-        nome: dto.nome?.trim(),
-        descricao: dto.descricao,
-        dataInicio: dto.dataInicio ? new Date(dto.dataInicio) : undefined,
-        dataFim: dto.dataFim ? new Date(dto.dataFim) : undefined,
-        status: dto.status,
-      },
+  /**
+   * Edita dados e status. Campo omitido fica como esta; `null` apaga a
+   * descricao ou uma das datas. O novo periodo nao pode deixar destinos de fora.
+   */
+  async atualizar(
+    viagemId: string,
+    autor: UsuarioAutenticado,
+    papel: PapelNaViagem,
+    dto: AtualizarViagemDto,
+  ): Promise<ViagemDto> {
+    return this.prisma.$transaction(async (tx) => {
+      // Trava junto com os destinos: nenhum destino entra fora do periodo
+      // enquanto o periodo esta sendo trocado.
+      await travarViagem(tx, viagemId);
+      const atual = await tx.viagem.findUniqueOrThrow({
+        where: { id: viagemId },
+        select: { dataInicio: true, dataFim: true },
+      });
+
+      const dataInicio = dataDoCorpo(dto.dataInicio, atual.dataInicio, 'inicio');
+      const dataFim = dataDoCorpo(dto.dataFim, atual.dataFim, 'fim');
+      this.validarPeriodo(dataInicio, dataFim);
+      await this.garantirDestinosNoPeriodo(tx, viagemId, dataInicio, dataFim);
+
+      const viagem = await tx.viagem.update({
+        where: { id: viagemId },
+        data: {
+          nome: dto.nome,
+          ...(dto.descricao !== undefined && { descricao: dto.descricao }),
+          dataInicio,
+          dataFim,
+          status: dto.status,
+        },
+      });
+
+      await this.notificacoes.registrar(tx, {
+        viagemId,
+        autorId: autor.id,
+        tipo: TipoNotificacao.VIAGEM_ATUALIZADA,
+        mensagem: (nomeViagem) => `${autor.nome} atualizou as informacoes de ${nomeViagem}`,
+      });
+
+      return paraViagemDto(viagem, papel);
     });
   }
 
-  /** RF05 - excluir viagem (exige CRIADOR). Destinos, membros e orcamento caem em cascata. */
-  async remover(viagemId: string) {
+  /** Exclui a viagem; destinos, atividades, membros, orcamento e avisos caem em cascata. */
+  async remover(viagemId: string): Promise<void> {
     await this.prisma.viagem.delete({ where: { id: viagemId } });
   }
 
-  private gerarCodigoConvite(): string {
-    let codigo = '';
-
-    for (let i = 0; i < TAMANHO_CODIGO; i++) {
-      codigo += ALFABETO_CODIGO[randomInt(ALFABETO_CODIGO.length)];
+  /** As datas gerais formam um periodo: precisam de inicio e nao podem inverter. */
+  private validarPeriodo(dataInicio: Date | null, dataFim: Date | null) {
+    if (dataFim && !dataInicio) {
+      throw requisicaoInvalida(
+        CodigoErro.PERIODO_INVALIDO,
+        'Uma viagem com data de fim precisa ter data de inicio',
+      );
     }
 
-    return codigo;
+    if (dataInicio && dataFim && dataFim < dataInicio) {
+      throw requisicaoInvalida(
+        CodigoErro.PERIODO_INVALIDO,
+        'A data de fim nao pode ser anterior a data de inicio',
+      );
+    }
+  }
+
+  private async garantirDestinosNoPeriodo(
+    tx: Prisma.TransactionClient,
+    viagemId: string,
+    dataInicio: Date | null,
+    dataFim: Date | null,
+  ) {
+    const foraDoPeriodo: Prisma.DestinoViagemWhereInput[] = [
+      ...(dataInicio ? [{ chegada: { lt: dataInicio } }, { saida: { lt: dataInicio } }] : []),
+      ...(dataFim ? [{ chegada: { gt: dataFim } }, { saida: { gt: dataFim } }] : []),
+    ];
+
+    if (foraDoPeriodo.length === 0) {
+      return;
+    }
+
+    const quantos = await tx.destinoViagem.count({ where: { viagemId, OR: foraDoPeriodo } });
+
+    if (quantos > 0) {
+      throw requisicaoInvalida(
+        CodigoErro.DESTINOS_FORA_DO_PERIODO,
+        `${quantos} destino(s) do roteiro ficariam fora do novo periodo; ajuste as datas deles antes`,
+      );
+    }
   }
 }

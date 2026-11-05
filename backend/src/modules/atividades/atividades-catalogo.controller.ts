@@ -1,40 +1,56 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
-  NotImplementedException,
+  HttpCode,
+  HttpStatus,
   Param,
-  ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import {
-  ApiBody,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
-  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 import { Publico } from '../../common/decorators/publico.decorator';
+import { UsuarioAtual } from '../../common/decorators/usuario-atual.decorator';
+import { CodigoErro } from '../../common/erros/codigos-erro';
+import { ParseIdPipe } from '../../common/pipes/parse-id.pipe';
 import {
   ApiAutenticado,
   ApiErro,
   ApiErroValidacao,
-  ApiNaoImplementado,
+  ApiParamId,
 } from '../../common/swagger/api-respostas.decorator';
+import { UsuarioAutenticado } from '../../common/types/usuario-autenticado';
 import { AtividadesService } from './atividades.service';
 import {
-  AtividadeDestaqueDto,
   AtividadeDetalheDto,
   CatalogoAtividadeDto,
   PaginaAtividadesDto,
 } from './dto/atividade-resposta.dto';
 import { BuscarAtividadesDto } from './dto/buscar-atividades.dto';
-import { CriarCatalogoAtividadeDto } from './dto/criar-catalogo-atividade.dto';
-import { ImportarAtividadeDto } from './dto/importar-atividade.dto';
+import {
+  AtualizarCatalogoAtividadeDto,
+  CriarCatalogoAtividadeDto,
+} from './dto/criar-catalogo-atividade.dto';
 
-/** Catalogo global de atividades/locais, enriquecido pela Google Places API. */
+const ApiParamAtividade = () => ApiParamId('id', 'Id da atividade no catalogo');
+const ApiNaoEncontrada = () =>
+  ApiErro(
+    404,
+    CodigoErro.ATIVIDADE_CATALOGO_NAO_ENCONTRADA,
+    'Atividade nao encontrada no catalogo',
+  );
+const ApiSoQuemCadastrou = () =>
+  ApiErro(403, CodigoErro.APENAS_QUEM_CADASTROU, 'So quem cadastrou pode alterar ou excluir');
+
+/** Catalogo global de atividades e locais. As consultas sao publicas. */
 @ApiTags('Atividades - Catalogo')
 @Controller('atividades')
 export class AtividadesCatalogoController {
@@ -43,13 +59,13 @@ export class AtividadesCatalogoController {
   @Publico()
   @Get()
   @ApiOperation({
-    summary: 'RF24, RN01 - Catalogo de atividades com busca e filtros',
+    summary: 'Catalogo de atividades com busca e filtros',
     description:
-      'Publico. Busca por nome; filtros por tipo, cidade, pais e nota minima. ' +
-      'Ordenado pela media de avaliacoes.',
+      'Publico. Busca por nome; filtros por tipo, cidade, pais e nota minima. Ordenado pela ' +
+      'melhor media.',
   })
   @ApiOkResponse({ type: PaginaAtividadesDto })
-  @ApiErroValidacao('notaMinima must not be greater than 5')
+  @ApiErroValidacao('A nota minima nao pode ser maior que 5')
   buscar(@Query() filtros: BuscarAtividadesDto) {
     return this.atividadesService.buscarNoCatalogo(filtros);
   }
@@ -57,61 +73,86 @@ export class AtividadesCatalogoController {
   @Publico()
   @Get('destaques')
   @ApiOperation({
-    summary: 'RF25 - Atividades mais bem avaliadas',
+    summary: 'Atividades mais bem avaliadas',
     description: 'Publico. As 10 melhores medias entre as atividades ja avaliadas.',
   })
-  @ApiOkResponse({ type: [AtividadeDestaqueDto] })
-  destaques() {
+  @ApiOkResponse({ type: [CatalogoAtividadeDto] })
+  destaques(): Promise<CatalogoAtividadeDto[]> {
     return this.atividadesService.listarDestaques();
   }
 
   @Publico()
   @Get(':id')
+  @ApiParamAtividade()
   @ApiOperation({
-    summary: 'RF23 - Pagina publica da atividade com media e reviews',
-    description: 'Publico. Traz as 20 avaliacoes mais recentes e o total de avaliacoes.',
+    summary: 'Pagina publica da atividade',
+    description: 'Publico. Dados, media, total de avaliacoes e as 20 avaliacoes mais recentes.',
   })
-  @ApiParam({ name: 'id', description: 'Id da atividade no catalogo', example: 1 })
   @ApiOkResponse({ type: AtividadeDetalheDto })
-  @ApiErro(404, 'Atividade nao encontrada no catalogo')
-  detalhar(@Param('id', ParseIntPipe) id: number) {
-    return this.atividadesService.buscarDoCatalogoPorId(id);
+  @ApiErroValidacao('O parametro id deve ser um numero inteiro positivo')
+  @ApiNaoEncontrada()
+  detalhar(@Param('id', ParseIdPipe) id: number): Promise<AtividadeDetalheDto> {
+    return this.atividadesService.buscarDoCatalogo(id);
   }
 
   @Post()
   @ApiAutenticado()
   @ApiOperation({
     summary: 'Cadastrar atividade no catalogo',
-    description: 'Cadastro manual. O `googlePlaceId`, se informado, e unico.',
+    description:
+      'Qualquer usuario autenticado cadastra; so ele podera editar ou excluir. Para a foto, ' +
+      'envie o arquivo por POST /uploads e use a `urlPublica` em `fotoUrl`.',
   })
   @ApiCreatedResponse({ type: CatalogoAtividadeDto })
   @ApiErroValidacao(
-    'tipoAtividade must be one of the following values: PASSEIO, REFEICAO, HOSPEDAGEM, TRANSPORTE, OUTRO',
+    'Tipo de atividade invalido: use PASSEIO, REFEICAO, HOSPEDAGEM, TRANSPORTE, OUTRO',
   )
-  @ApiErro(
-    409,
-    'Ja existe atividade com este googlePlaceId',
-    'Ja existe um registro com este valor em: google_place_id',
-  )
-  criar(@Body() dto: CriarCatalogoAtividadeDto) {
-    return this.atividadesService.criarNoCatalogo(dto);
+  criar(
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @Body() dto: CriarCatalogoAtividadeDto,
+  ): Promise<CatalogoAtividadeDto> {
+    return this.atividadesService.criarNoCatalogo(usuario.id, dto);
   }
 
-  @Post('importar')
+  @Patch(':id')
   @ApiAutenticado()
+  @ApiParamAtividade()
   @ApiOperation({
-    summary: 'Importar atividade do Google Places (nao implementado)',
-    description:
-      'Cria a atividade no catalogo a partir do `googlePlaceId`, com os dados da ' +
-      'Google Places API (Secao 2 da arquitetura).',
+    summary: 'Editar atividade do catalogo',
+    description: 'So quem cadastrou. Envie so o que muda; `null` apaga um campo opcional.',
   })
-  @ApiBody({ type: ImportarAtividadeDto })
-  @ApiCreatedResponse({ type: CatalogoAtividadeDto })
-  @ApiErroValidacao('googlePlaceId should not be empty')
-  @ApiErro(404, 'Local nao encontrado na Google Places API')
-  @ApiNaoImplementado()
-  importar(): never {
-    // TODO: ver a integracao com a Google Places API em atividades.module.ts.
-    throw new NotImplementedException('Importacao do Google Places ainda nao implementada');
+  @ApiOkResponse({ type: CatalogoAtividadeDto })
+  @ApiErroValidacao('Informe uma URL valida para a foto')
+  @ApiSoQuemCadastrou()
+  @ApiNaoEncontrada()
+  atualizar(
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @Param('id', ParseIdPipe) id: number,
+    @Body() dto: AtualizarCatalogoAtividadeDto,
+  ): Promise<CatalogoAtividadeDto> {
+    return this.atividadesService.atualizarNoCatalogo(usuario.id, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiAutenticado()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiParamAtividade()
+  @ApiOperation({
+    summary: 'Excluir atividade do catalogo',
+    description: 'So quem cadastrou, e so se nenhuma viagem a agendou e ninguem mais a avaliou.',
+  })
+  @ApiNoContentResponse({ description: 'Atividade excluida' })
+  @ApiSoQuemCadastrou()
+  @ApiNaoEncontrada()
+  @ApiErro(
+    409,
+    CodigoErro.CATALOGO_EM_USO,
+    'A atividade esta em viagens ou tem avaliacoes de outros',
+  )
+  remover(
+    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @Param('id', ParseIdPipe) id: number,
+  ): Promise<void> {
+    return this.atividadesService.removerDoCatalogo(usuario.id, id);
   }
 }
