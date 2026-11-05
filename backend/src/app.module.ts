@@ -19,15 +19,18 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { ViagensModule } from './modules/viagens/viagens.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { GeoapifyModule } from './geoapify/geoapify.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       load: [configuracao],
       validate: validarEnv,
     }),
     PrismaModule,
+    GeoapifyModule,
     AwsModule,
     MailModule,
     NotificacoesModule,

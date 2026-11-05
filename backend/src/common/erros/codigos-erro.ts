@@ -53,9 +53,13 @@ export const CodigoErro = {
   ORDEM_INVALIDA: 'ORDEM_INVALIDA',
   ATIVIDADE_CATALOGO_NAO_ENCONTRADA: 'ATIVIDADE_CATALOGO_NAO_ENCONTRADA',
   ATIVIDADE_NAO_ENCONTRADA: 'ATIVIDADE_NAO_ENCONTRADA',
-  GOOGLE_PLACE_ID_DUPLICADO: 'GOOGLE_PLACE_ID_DUPLICADO',
   APENAS_QUEM_CADASTROU: 'APENAS_QUEM_CADASTROU',
   CATALOGO_EM_USO: 'CATALOGO_EM_USO',
+
+  GEOAPIFY_INDISPONIVEL: 'GEOAPIFY_INDISPONIVEL',
+  GEOAPIFY_LIMITE: 'GEOAPIFY_LIMITE',
+  LUGAR_NAO_ENCONTRADO: 'LUGAR_NAO_ENCONTRADO',
+  LUGAR_INVALIDO: 'LUGAR_INVALIDO',
 
   // Orcamento, avaliacoes, notificacoes e uploads
   ORCAMENTO_NAO_DEFINIDO: 'ORCAMENTO_NAO_DEFINIDO',
@@ -75,7 +79,9 @@ export const DESCRICAO_CODIGO_ERRO: Record<CodigoErro, string> = {
   CORPO_INVALIDO:
     'Corpo ilegivel: charset ou compressao nao suportados, ou envio interrompido (400/415).',
   NAO_AUTENTICADO: 'Token de acesso ausente, invalido ou expirado.',
-  SESSAO_ENCERRADA: 'O token foi revogado (logout, troca ou redefinicao de senha).',
+  SESSAO_ENCERRADA:
+    'Token de acesso invalidado por DELETE /usuarios/eu/sessoes, troca ou redefinicao de senha. ' +
+    'POST /auth/logout revoga apenas o refresh token informado; o access token continua valido ate expirar.',
   PROIBIDO: 'Autenticado, mas sem permissao para a operacao.',
   NAO_ENCONTRADO: 'Recurso inexistente.',
   ROTA_NAO_ENCONTRADA: 'Metodo + caminho que nao existem na API.',
@@ -111,12 +117,17 @@ export const DESCRICAO_CODIGO_ERRO: Record<CodigoErro, string> = {
   ORDEM_INVALIDA: 'A lista de reordenacao nao corresponde aos destinos da viagem.',
   ATIVIDADE_CATALOGO_NAO_ENCONTRADA: 'Atividade inexistente no catalogo.',
   ATIVIDADE_NAO_ENCONTRADA: 'Atividade inexistente nesta viagem.',
-  GOOGLE_PLACE_ID_DUPLICADO: 'Ja existe atividade com este googlePlaceId.',
   APENAS_QUEM_CADASTROU: 'So quem cadastrou o item do catalogo pode altera-lo ou exclui-lo.',
   CATALOGO_EM_USO: 'O item do catalogo esta em viagens ou tem avaliacoes de outras pessoas.',
   ORCAMENTO_NAO_DEFINIDO: 'A viagem ainda nao tem orcamento.',
   AVALIACAO_NAO_ENCONTRADA: 'Voce ainda nao avaliou esta atividade.',
   ATIVIDADE_NAO_REALIZADA: 'So avalia quem tem a atividade concluida numa viagem de que participa.',
   NOTIFICACAO_NAO_ENCONTRADA: 'Notificacao inexistente ou de outro usuario.',
+  GEOAPIFY_INDISPONIVEL:
+    'Geoapify sem chave configurada, chave recusada ou fornecedor indisponivel.',
+  GEOAPIFY_LIMITE:
+    'Limite ou cota da Geoapify atingido. Consulte o catalogo local ou tente mais tarde.',
+  LUGAR_NAO_ENCONTRADO: 'Identificador externo nao encontrado na Geoapify.',
+  LUGAR_INVALIDO: 'Lugar sem dados necessarios ou nao corresponde a uma cidade.',
   UPLOAD_INDISPONIVEL: 'O armazenamento de arquivos nao esta configurado neste ambiente.',
 };

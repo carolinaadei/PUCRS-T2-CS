@@ -127,7 +127,10 @@ export class DestinosService {
     dto: AtualizarDestinoCatalogoDto,
   ): Promise<DestinoCatalogoDto> {
     await this.garantirAutoria(usuarioId, id);
-    const destino = await this.prisma.destinoCatalogo.update({ where: { id }, data: dto });
+    const destino = await this.prisma.destinoCatalogo.update({
+      where: { id },
+      data: { ...dto, ...(dto.pais !== undefined && { codigoPais: null }) },
+    });
     return paraDestinoCatalogoDto(destino);
   }
 

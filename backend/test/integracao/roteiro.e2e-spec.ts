@@ -331,7 +331,15 @@ comBanco('Roteiro: destinos, atividades e orcamento (integracao)', () => {
       expect(body[0].destinoViagem).toEqual({
         id: destinos.lisboa,
         ordem: 2,
-        destinoCatalogo: { id: lisboa, nome: 'Lisboa', pais: 'Portugal' },
+        destinoCatalogo: {
+          id: lisboa,
+          nome: 'Lisboa',
+          pais: 'Portugal',
+          fonte: 'manual',
+          idExterno: null,
+          codigoPais: null,
+          atribuicoes: [],
+        },
       });
 
       const filtro = await t

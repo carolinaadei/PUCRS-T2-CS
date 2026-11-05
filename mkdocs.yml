@@ -45,3 +45,5 @@ nav:
     - Pipeline de CI/CD: pipeline.md
     - Infraestrutura (MiniStack): infra-ministack.md
     - Happy path dos testes: happy-path.md
+    - Geoapify (configuração e adoção): geoapify.md
+    - Demo pelo Swagger (4 minutos): demo-4-minutos.md

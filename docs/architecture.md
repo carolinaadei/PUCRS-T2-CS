@@ -24,68 +24,65 @@ Este documento descreve a representação da arquitetura cliente-servidor adotad
 
 ## **2. Representação da Arquitetura**
 
-A aplicação adota uma **arquitetura cliente-servidor** com separação clara entre camadas e integrações externas:
+O repositório entrega uma **API REST para frontends de terceiros**. Não inclui
+uma aplicação NextJS nem um serviço de renderização de mapas.
 
-- **Frontend (NextJS):** aplicação web responsiva que consome a API REST do backend, renderiza a interface e exibe mapas e cadastros de atividades/locais.
-- **Backend (NestJS):** API REST responsável pela lógica de negócio, autenticação, autorização, persistência e orquestração entre os serviços externos.
-- **Serviço de Mapas:** responsável pela visualização geográfica e roteamento em mapa, com biblioteca como Google Maps ou Leaflet/OpenStreetMap.
-- **Serviço de Locais/Atividades (catálogo_atividades):** integra a API do Google Places para complementar dados de locais, eventos, restaurantes, hotéis e pontos de interesse.
-- **Banco de Dados (PostgreSQL):** armazenamento relacional para usuários, viagens, destinos, atividades, orçamento e avaliações.
+- **Clientes externos:** implementam telas, mapas e consumo do contrato público HTTP/JSON.
+- **Backend (NestJS):** autenticação, autorização por viagem, regras de negócio e catálogo interno de destinos e atividades.
+- **PostgreSQL + Prisma:** persistência relacional e migrations versionadas.
+- **Serviços AWS:** S3 para fotos; SQS e SES para e-mails; Secrets Manager e SSM para configuração. Em desenvolvimento e no CI, são emulados pelo MiniStack.
+- **Worker:** processo separado que consome a fila de e-mails e entrega pelo provedor configurado.
+
+A **Geoapify** fornece busca de cidades, autocompletar e pontos de interesse.
+A importação confirma os dados no fornecedor e grava no catálogo local a
+identidade `fonte` + `idExterno`, o país ISO e as atribuições. Reimportações
+reutilizam o item sem alterar autoria, fotos ou avaliações. Detalhes em
+[Geoapify: configuração e uso](geoapify.md).
 
 ### **2.1 Diagrama de Relações**
 
-```
-┌────────────────────┐      HTTP/JSON      ┌─────────────────────┐
-│                    │ ──────────────────► │                     │
-│  Frontend (NextJS) │                     │  Backend (NestJS)   │
-│  (Web App)         │ ◄────────────────── │  REST + Auth + RBAC │
-│  - Dashboard       │                     │                     │
-│  - Viagens         │                     │                     │
-│  - Destinos        │                     │                     │
-│  - Orçamento       │                     │                     │
-└────────────────────┘                     └──────────┬──────────┘
-                                                        │
-                        ┌───────────────────────────────┼───────────────────────────────┐
-                        │                               │                               │
-                        ▼                               ▼                               ▼
-                ┌─────────────────────┐       ┌──────────────────────────────┐      ┌─────────────────────┐
-                │  Serviço de Mapas   │       │ Serviço de Locais/Atividades │      │  Banco de Dados     │
-                │  Google Maps /      │       │  Google Places API           │      │  PostgreSQL/        │
-                │  Leaflet + OSM      │       │  - catálogo_atividades       │      │  - usuarios         │
-                │  - geolocalização   │       │  - busca por locais          │      │  - viagens          │
-                │  - rotas            │       │  - dados de pontos de        │      │  - destinos         │
-                │  - marcadores       │       │    interesse                 │      │  - atividades       │
-                └─────────────────────┘       └──────────────────────────────┘      └─────────────────────┘
+```text
+Clientes de terceiros -- HTTP/JSON --> API NestJS --> PostgreSQL
+                                         |
+                                         +--> S3 (upload direto pelo cliente com formulario assinado)
+                                         +--> SQS --> Worker --> SES / provedor de e-mail
+                                         +--> Secrets Manager + SSM (configuracao no boot)
+
+Desenvolvimento/CI: servicos AWS emulados pelo MiniStack.
+API --> Geoapify (busca e detalhes para importacao; chave no servidor).
 ```
 
 ## **3. Metas e Restrições de Arquitetura**
 
 |**Restrição**|**Ferramenta**|
 | :- | :- |
-|Linguagem|A definir pela equipe|
-|Framework|A definir pela equipe|
-|Plataforma|Web (navegador)|
-|Segurança|Senhas com hash; autenticação via JWT; controle de acesso por viagem|
+|Linguagem|TypeScript no Node.js 22|
+|Framework|NestJS 11; Prisma 6 para acesso ao PostgreSQL 16|
+|Plataforma|API HTTP/JSON; clientes externos independentes|
+|Segurança|Senhas com bcrypt; JWT e refresh tokens; controle de acesso por viagem|
 |Idioma|Português (pt-BR)|
-|Mapa interativo|ex: jsVectormap/Google Maps API|
+|Mapa interativo|Responsabilidade do cliente; a API fornece países visitados em ISO 3166-1 alfa-2|
 
 ## **4. Visão Lógica**
 
 ### **4.1 Visão geral: Pacotes e Camadas**
 
-O sistema é organizado em cinco blocos principais:
-
-- **Camada de Apresentação (Frontend):** responsável pela interface com o usuário — renderização de telas, formulários, mapa interativo, filtros de busca e consumo da API REST.
-- **Camada de Negócio (Backend / API REST):** responsável pelas regras de negócio, autenticação, controle de permissões, criação de viagens e orquestração de operações sobre dados e integrações externas.
-- **Serviço de Mapas:** encapsula a lógica de renderização geográfica, geolocalização, rotas e marcadores em mapas interativos.
-- **Serviço de Locais/Atividades (catálogo_atividades):** integra a Google Places API para buscar, validar e enriquecer informações de locais, atrações e estabelecimentos que podem ser cadastrados em viagens ou atividades.
-- **Camada de Dados (Banco de Dados):** responsável pela persistência das informações — usuários, viagens, destinos, atividades, orçamento, avaliações e referências ao catálogo externo.
-
-> O backend deve manter um catálogo interno de atividades/locais, sincronizando dados com o Google Places API quando necessário e preservando registros próprios de avaliações e contexto da viagem.
+- **Controllers e DTOs:** rotas HTTP, validação de entrada e contrato OpenAPI.
+- **Services:** regras de negócio, transações e orquestração de notificações e integrações implementadas.
+- **Guards:** autenticação e autorização conforme vínculo e permissão na viagem.
+- **Prisma:** acesso ao banco e persistência do catálogo interno, independente de APIs de lugares.
+- **Infraestrutura e worker:** fotos no S3 e entrega assíncrona de e-mails pela fila.
 
 ### **4.2 Organização do Código**
 
-A estrutura de diretórios segue a separação entre frontend e backend em repositórios ou módulos distintos. A organização interna de cada camada será definida pela equipe conforme o framework adotado.
+O código executável está em `backend/`:
+
+- `src/modules/`: módulos de negócio e integrações da API.
+- `src/common/`: DTOs, erros, guards, decorators, utilitários e convenções HTTP compartilhadas.
+- `src/config/`: validação do ambiente, configuração AWS, logging, aplicação e Swagger.
+- `src/prisma/` e `prisma/`: serviço de banco, schema, migrations e seed.
+- `src/main.ts` e `src/worker.ts`: pontos de entrada da API e do worker.
+- `test/`: testes e2e e de integração; testes unitários ficam junto do código em `src/`.
 
 ### **4.3 Infraestrutura**
 
@@ -93,13 +90,27 @@ Os serviços gerenciados que a API consome — armazenamento de fotos (S3), fila
 
 ### **4.4 Diagrama de Classes**
 
-[Inserir diagrama de classes após definição do framework e linguagem de implementação.]
+A dependência típica de uma operação é:
+
+```text
+Controller --> DTO de entrada (validacao)
+    |
+    +--> Service --> PrismaService --> PostgreSQL
+              |
+              +--> NotificacoesService / servicos de infraestrutura
+    |
+    +--> DTO de resposta (contrato publico)
+```
+
+Por exemplo, `AtividadesController` delega a `AtividadesService`, que usa
+`PrismaService`, `OrcamentoService` e `NotificacoesService`. Guards verificam o
+acesso antes da execução de operações vinculadas a uma viagem.
 
 ## **5. Visão de Implementação**
 
 ### **5.1 Diagrama de Entidade-Relacionamento**
 
-O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode ser visualizado em [dbdiagram.io](https://dbdiagram.io).
+O modelo relacional é composto pelas entidades abaixo. A fonte de verdade é o [schema Prisma](https://github.com/carolinaadei/PUCRS-T2-CS/blob/dev/backend/prisma/schema.prisma); o DLD textual está na seção 5.2.
 
 #### Enums
 
@@ -155,8 +166,8 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
-| `id` | string | PK (8 caracteres) |
-| `codigo_convite` | string | NOT NULL, UNIQUE — pode ser trocado pelo criador |
+| `id` | varchar(12) | PK; gerado pela API com 8 caracteres; seeds podem ter outro comprimento |
+| `codigo_convite` | varchar(12) | NOT NULL, UNIQUE — pode ser trocado pelo criador |
 | `nome` | varchar | NOT NULL |
 | `descricao` | text | |
 | `data_inicio` | date | |
@@ -170,12 +181,16 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
 | `id` | integer | PK, auto-increment |
-| `viagem_id` | integer | NOT NULL, FK → viagem.id |
+| `viagem_id` | varchar(12) | NOT NULL, FK → viagem.id |
 | `usuario_id` | integer | NOT NULL, FK → usuario.id |
 | `permissao` | permissao_membro | NOT NULL |
 | `entrou_em` | timestamp | default: `now()` |
 
 **destino_catalogo**
+
+Além dos dados de cidade, o catálogo persiste `fonte` (varchar(40), default
+`manual`), `id_externo` (varchar(2048), opcional), `codigo_pais` (varchar(2),
+opcional) e `atribuicoes` (jsonb, default `[]`). O par `fonte, id_externo` é único.
 
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
@@ -197,7 +212,7 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
 | `id` | integer | PK, auto-increment |
-| `viagem_id` | integer | NOT NULL, FK → viagem.id |
+| `viagem_id` | varchar(12) | NOT NULL, FK → viagem.id |
 | `destino_catalogo_id` | integer | NOT NULL, FK → destino_catalogo.id |
 | `chegada` | date | |
 | `saida` | date | |
@@ -217,9 +232,11 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | `pais` | varchar | |
 | `latitude` | float | |
 | `longitude` | float | |
-| `google_place_id` | varchar | UNIQUE |
+| `id_externo` | varchar(2048) | opcional; UNIQUE em conjunto com `fonte` |
+| `codigo_pais` | varchar(2) | ISO alfa-2; opcional |
+| `atribuicoes` | jsonb | créditos e links; default: `[]` |
 | `foto_url` | varchar | |
-| `fonte` | varchar | default: `manual` (`manual`, `seed` ou `google_places`) |
+| `fonte` | varchar | default: `manual`; valores usados: `manual`, `seed`, `geoapify` |
 | `media_avaliacao` | float | default: 0 (derivado) |
 | `criado_por` | integer | FK → usuario.id (SET NULL); só quem cadastrou edita |
 | `criado_em` | timestamp | default: `now()` |
@@ -241,7 +258,7 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | Coluna | Tipo | Restrições |
 | ------ | ---- | ---------- |
 | `id` | integer | PK, auto-increment |
-| `viagem_id` | integer | NOT NULL, UNIQUE, FK → viagem.id (1:1) |
+| `viagem_id` | varchar(12) | NOT NULL, UNIQUE, FK → viagem.id (1:1) |
 | `valor_total` | decimal(10,2) | NOT NULL |
 | `previsto_atividades` | decimal(10,2) | default: 0 |
 
@@ -263,7 +280,7 @@ O modelo relacional é composto pelas entidades abaixo. O diagrama completo pode
 | ------ | ---- | ---------- |
 | `id` | integer | PK, auto-increment |
 | `usuario_id` | integer | NOT NULL, FK → usuario.id (destinatário) |
-| `viagem_id` | string | NOT NULL, FK → viagem.id |
+| `viagem_id` | varchar(12) | NOT NULL, FK → viagem.id |
 | `tipo` | tipo_notificacao | NOT NULL |
 | `mensagem` | text | NOT NULL |
 | `lida_em` | timestamp | null enquanto não lida |
@@ -305,11 +322,11 @@ viagem(#id, codigo_convite, nome, descricao, data_inicio, data_fim, status, *cri
 
 membro_viagem(#id, *viagem_id→viagem, *usuario_id→usuario, permissao, entrou_em)
 
-destino_catalogo(#id, nome, pais, categoria, descricao, latitude, longitude, foto_url, *criado_por→usuario, criado_em)
+destino_catalogo(#id, nome, pais, categoria, descricao, latitude, longitude, foto_url, fonte, id_externo, codigo_pais, atribuicoes, *criado_por→usuario, criado_em)
 
 destino_viagem(#id, *viagem_id→viagem, *destino_catalogo_id→destino_catalogo, chegada, saida, descricao, ordem)
 
-catalogo_atividade(#id, nome, descricao, tipo_atividade, local, cidade, pais, latitude, longitude, google_place_id, foto_url, fonte, media_avaliacao, *criado_por→usuario, criado_em)
+catalogo_atividade(#id, nome, descricao, tipo_atividade, local, cidade, pais, latitude, longitude, id_externo, codigo_pais, atribuicoes, foto_url, fonte, media_avaliacao, *criado_por→usuario, criado_em)
 
 atividade_viagem(#id, *destino_viagem_id→destino_viagem, *catalogo_atividade_id→catalogo_atividade, data_horario, duracao_min, custo_previsto, status)
 

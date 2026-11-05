@@ -73,18 +73,6 @@ export class CriarCatalogoAtividadeDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    description: 'Identificador do local na Google Places API (unico no catalogo)',
-    example: 'ChIJ1Ww5Hc80GQ0RXkYcB6Ew3xE',
-  })
-  @ApararOuNulo()
-  @IsString({ message: 'O googlePlaceId deve ser um texto' })
-  @MaxLength(255, { message: 'O googlePlaceId deve ter no maximo 255 caracteres' })
-  @IsOptional()
-  googlePlaceId?: string | null;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
     example: 'http://localhost:4566/viajajunto-local-midia/publico/atividades/9a2b.jpg',
     description: 'URL da foto; use a `urlPublica` devolvida por POST /uploads',
   })

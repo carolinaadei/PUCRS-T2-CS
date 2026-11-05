@@ -75,6 +75,8 @@ Para desligar: `docker compose down` (com `-v`, apaga também os dados).
 * [Documentação completa (GitHub Pages)](https://carolinaadei.github.io/PUCRS-T2-CS/)
 * [Documento de Requisitos](docs/requirements.md) · [Documento de Arquitetura](docs/architecture.md)
 * [Infraestrutura: CloudFormation no MiniStack](docs/infra-ministack.md)
+* [Geoapify: configuração, busca e importação](docs/geoapify.md)
+* [Demo pelo Swagger em 4 minutos, sem narração](docs/demo-4-minutos.md)
 * [Backend: rotas, convenções e decisões](backend/README.md) · [Recuperação de senha](backend/docs/recuperacao-de-senha.md)
 * [Pipeline de CI/CD](docs/pipeline.md)
 

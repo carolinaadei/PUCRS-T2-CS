@@ -73,11 +73,12 @@ No boot, antes de o Nest validar o ambiente, `carregarConfiguracaoDaAws`
 ([`src/config/configuracao-aws.ts`](https://github.com/carolinaadei/PUCRS-T2-CS/blob/dev/backend/src/config/configuracao-aws.ts))
 lê os segredos do Secrets Manager e todos os parâmetros do caminho no SSM, e os
 coloca no `process.env`. Variável definida explicitamente no ambiente sempre vence.
-O log de boot mostra o que foi aplicado:
+No compose (`NODE_ENV=production`), o log de boot sai em JSON, uma linha por
+evento. Exemplo ilustrativo; `pid` e `timestamp` variam:
 
-```
-[ConfiguracaoAws] Segredo viajajunto/local/jwt: JWT_SECRET
-[ConfiguracaoAws] Parametros /viajajunto/local/: CORS_ORIGINS, EMAIL_REMETENTE, MAIL_PROVEDOR, PUBLIC_URL, S3_BUCKET_MIDIA, SQS_FILA_EMAILS
+```json
+{"level":"log","pid":1,"timestamp":1793808000000,"message":"Segredo viajajunto/local/jwt: JWT_SECRET","context":"ConfiguracaoAws"}
+{"level":"log","pid":1,"timestamp":1793808000001,"message":"Parametros /viajajunto/local/: CORS_ORIGINS, EMAIL_REMETENTE, MAIL_PROVEDOR, PUBLIC_URL, S3_BUCKET_MIDIA, SQS_FILA_EMAILS","context":"ConfiguracaoAws"}
 ```
 
 Com isso a API sobe com `NODE_ENV=production` no compose — com todas as exigências

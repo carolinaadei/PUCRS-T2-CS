@@ -129,6 +129,8 @@ services:
     environment:
       <<: *app
       PORT: 3000
+      # Para ler a chave do backend/.env: docker compose --env-file backend/.env up -d --build --wait
+      GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY:-}
     ports:
       - '${API_PORT:-3000}:3000'
     # O SIGTERM espera as requisicoes em curso e fecha o banco (enableShutdownHooks).

@@ -57,4 +57,12 @@ describe('Limites de requisicao (e2e)', () => {
       await t.http().get('/api/health/live').expect(200);
     }
   });
+
+  it('Geoapify: limita a 20 consultas por minuto antes da autenticacao', async () => {
+    for (let tentativa = 1; tentativa <= 20; tentativa++) {
+      await t.http().get('/api/v1/lugares/cidades?busca=Porto').expect(401);
+    }
+    const { body } = await t.http().get('/api/v1/lugares/cidades?busca=Porto').expect(429);
+    expect(body.codigo).toBe('MUITAS_REQUISICOES');
+  });
 });

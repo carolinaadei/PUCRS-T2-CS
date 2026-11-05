@@ -122,7 +122,7 @@ comBanco('Catalogo e avaliacoes (integracao)', () => {
         .http()
         .post('/api/v1/atividades')
         .set(bearer(ana.token))
-        .send({ nome: 'Torre de Belem', tipoAtividade: 'PASSEIO', googlePlaceId: 'ChIJ-torre' })
+        .send({ nome: 'Torre de Belem', tipoAtividade: 'PASSEIO' })
         .expect(201);
       torre = atividade.id;
       expect(atividade).toMatchObject({ fonte: 'manual', criadoPor: ana.id, totalAvaliacoes: 0 });
@@ -138,14 +138,14 @@ comBanco('Catalogo e avaliacoes (integracao)', () => {
   });
 
   describe('catalogo de atividades', () => {
-    it('googlePlaceId e unico, com codigo proprio', async () => {
+    it('nao aceita forjar origem externa pelo cadastro manual', async () => {
       const { body } = await t
         .http()
         .post('/api/v1/atividades')
         .set(bearer(bruno.token))
-        .send({ nome: 'Copia', tipoAtividade: 'PASSEIO', googlePlaceId: 'ChIJ-torre' })
-        .expect(409);
-      expect(body.codigo).toBe('GOOGLE_PLACE_ID_DUPLICADO');
+        .send({ nome: 'Copia', tipoAtividade: 'PASSEIO', fonte: 'geoapify', idExterno: 'forjado' })
+        .expect(400);
+      expect(body.codigo).toBe('VALIDACAO');
     });
 
     it('filtra por tipo e cidade sem login', async () => {

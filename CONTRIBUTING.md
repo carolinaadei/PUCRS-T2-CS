@@ -25,20 +25,23 @@ Trata-se da branch de desenvolvimento, aonde recebe novas features e correções
 
 ### *branch de feature*
 
-É a branch aonde as novas features e correções destacadas nas issues são desenvolvidas. Ao finalizar a implementação, é feito um *Pull Request* para a *dev*. Sua nomeclatura é da seguinte forma:
+Novas funcionalidades e correções partem da `dev`. Ao finalizar, abra um *Pull Request* para a `dev`. Use prefixos conforme o tipo de mudança e uma descrição em minúsculas, com palavras separadas por hífen:
 
 ```
-<número da issue>-descricao_da_feature
- ```
- 
- Ex: 6-cadastro_de_usuarios
+feat/descricao-da-funcionalidade
+fix/descricao-da-correcao
+docs/descricao-da-documentacao
+```
+
+Exemplos usados no repositório: `feat/cria-viagem`, `feat/swagger-completo` e
+`fix/limpeza-das-saidas-da-api`. Quando houver issue, vincule-a no PR.
  
 ### *branch de hotfix*
 
 É a branch utilizada para corrigir bugs identificados em produção, sendo assim, é criada a partir da *main* e segue o seguinte padrão:
 
 ```
-hotfix_descricao_do_bug
+hotfix/descricao-do-bug
 ```
 
 ## Política de commits

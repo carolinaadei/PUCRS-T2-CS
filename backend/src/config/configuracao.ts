@@ -37,6 +37,7 @@ export const configuracao = () => {
     urlPublica: (process.env.PUBLIC_URL || `http://localhost:${porta}`).replace(/\/+$/, ''),
     corsOrigens: origens.length > 0 ? origens : ORIGENS_PADRAO,
     trustProxy: interpretarTrustProxy(process.env.TRUST_PROXY),
+    geoapify: { apiKey: process.env.GEOAPIFY_API_KEY?.trim() || undefined },
 
     // Nos segredos o fallback usa `||`, nao `??`: o .env.example deixa a chave
     // vazia (`CHAVE=`), e o dotenv entrega '' em vez de undefined. Com `??` a

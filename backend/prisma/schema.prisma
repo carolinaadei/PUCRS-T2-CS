@@ -106,12 +106,12 @@ model Usuario {
 /// apenas como hash. O token e trocado a cada uso (rotacao); reapresentar um
 /// token ja trocado indica roubo e derruba todas as sessoes do usuario.
 model SessaoRefresh {
-  id          Int       @id @default(autoincrement())
-  usuarioId   Int       @map("usuario_id")
-  tokenHash   String    @unique @map("token_hash") @db.VarChar(64)
-  expiraEm    DateTime  @map("expira_em")
-  revogadaEm  DateTime? @map("revogada_em")
-  criadaEm    DateTime  @default(now()) @map("criada_em")
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int       @map("usuario_id")
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(64)
+  expiraEm   DateTime  @map("expira_em")
+  revogadaEm DateTime? @map("revogada_em")
+  criadaEm   DateTime  @default(now()) @map("criada_em")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -191,22 +191,27 @@ model MembroViagem {
 
 /// Catalogo global de destinos (cidades) reaproveitado entre viagens.
 model DestinoCatalogo {
-  id        Int               @id @default(autoincrement())
-  nome      String            @db.VarChar(120)
-  pais      String?           @db.VarChar(80)
-  categoria CategoriaDestino?
-  descricao String?           @db.Text
-  latitude  Float?
-  longitude Float?
-  fotoUrl   String?           @map("foto_url") @db.VarChar(500)
+  id          Int               @id @default(autoincrement())
+  nome        String            @db.VarChar(120)
+  pais        String?           @db.VarChar(80)
+  categoria   CategoriaDestino?
+  descricao   String?           @db.Text
+  latitude    Float?
+  longitude   Float?
+  fotoUrl     String?           @map("foto_url") @db.VarChar(500)
+  fonte       String            @default("manual") @db.VarChar(40)
+  idExterno   String?           @map("id_externo") @db.VarChar(2048)
+  codigoPais  String?           @map("codigo_pais") @db.VarChar(2)
+  atribuicoes Json              @default("[]")
   /// Quem cadastrou; so essa pessoa edita ou exclui. Nulo nos registros do seed
   /// e quando a conta de quem cadastrou e excluida.
-  criadoPor Int?              @map("criado_por")
-  criadoEm  DateTime          @default(now()) @map("criado_em")
+  criadoPor   Int?              @map("criado_por")
+  criadoEm    DateTime          @default(now()) @map("criado_em")
 
   criador        Usuario?        @relation(fields: [criadoPor], references: [id], onDelete: SetNull)
   destinosViagem DestinoViagem[]
 
+  @@unique([fonte, idExterno])
   @@index([nome])
   @@index([criadoPor])
   @@map("destino_catalogo")
@@ -242,9 +247,11 @@ model CatalogoAtividade {
   pais           String?       @db.VarChar(80)
   latitude       Float?
   longitude      Float?
-  googlePlaceId  String?       @unique @map("google_place_id") @db.VarChar(255)
+  idExterno      String?       @map("id_externo") @db.VarChar(2048)
+  codigoPais     String?       @map("codigo_pais") @db.VarChar(2)
+  atribuicoes    Json          @default("[]")
   fotoUrl        String?       @map("foto_url") @db.VarChar(500)
-  /// Origem do registro: `manual` (cadastrado por um usuario), `seed` ou `google_places`.
+  /// Origem do registro: manual, seed ou geoapify.
   fonte          String        @default("manual") @db.VarChar(40)
   mediaAvaliacao Float         @default(0) @map("media_avaliacao")
   /// Quem cadastrou; so essa pessoa edita ou exclui.
@@ -255,6 +262,7 @@ model CatalogoAtividade {
   atividadesViagem AtividadeViagem[]
   avaliacoes       Avaliacao[]
 
+  @@unique([fonte, idExterno])
   @@index([nome])
   @@index([tipoAtividade])
   @@index([criadoPor])
@@ -282,12 +290,12 @@ model AtividadeViagem {
 
 /// Orcamento da viagem (relacao 1:1).
 model Orcamento {
-  id                  Int     @id @default(autoincrement())
-  viagemId            String  @unique @map("viagem_id") @db.VarChar(12)
-  valorTotal          Decimal @map("valor_total") @db.Decimal(10, 2)
+  id                 Int     @id @default(autoincrement())
+  viagemId           String  @unique @map("viagem_id") @db.VarChar(12)
+  valorTotal         Decimal @map("valor_total") @db.Decimal(10, 2)
   /// Campo derivado: soma de `atividade_viagem.custo_previsto` da viagem,
   /// recalculada na mesma transacao de cada escrita que mexe nos custos.
-  previstoAtividades  Decimal @default(0) @map("previsto_atividades") @db.Decimal(10, 2)
+  previstoAtividades Decimal @default(0) @map("previsto_atividades") @db.Decimal(10, 2)
 
   viagem Viagem @relation(fields: [viagemId], references: [id], onDelete: Cascade)
 

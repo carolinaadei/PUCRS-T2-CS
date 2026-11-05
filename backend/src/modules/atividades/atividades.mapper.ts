@@ -1,4 +1,5 @@
-import { AtividadeViagem, CatalogoAtividade } from '@prisma/client';
+import { paraOrigemLugar } from '../../geoapify/geoapify.dto';
+import { AtividadeViagem, CatalogoAtividade, DestinoCatalogo } from '@prisma/client';
 import { paraDinheiro } from '../../common/utils/formatos';
 import { AvaliacaoComAutor, paraAvaliacaoDto } from '../avaliacoes/avaliacoes.mapper';
 import {
@@ -14,6 +15,7 @@ export type CatalogoComContagem = CatalogoAtividade & { _count: { avaliacoes: nu
 export const CONTAR_AVALIACOES = { _count: { select: { avaliacoes: true } } } as const;
 
 export const paraCatalogoAtividadeDto = (atividade: CatalogoComContagem): CatalogoAtividadeDto => ({
+  ...paraOrigemLugar(atividade),
   id: atividade.id,
   nome: atividade.nome,
   descricao: atividade.descricao,
@@ -23,9 +25,7 @@ export const paraCatalogoAtividadeDto = (atividade: CatalogoComContagem): Catalo
   pais: atividade.pais,
   latitude: atividade.latitude,
   longitude: atividade.longitude,
-  googlePlaceId: atividade.googlePlaceId,
   fotoUrl: atividade.fotoUrl,
-  fonte: atividade.fonte,
   mediaAvaliacao: atividade.mediaAvaliacao,
   totalAvaliacoes: atividade._count.avaliacoes,
   criadoPor: atividade.criadoPor,
@@ -60,7 +60,7 @@ export const paraAtividadeViagemListaDto = (
     destinoViagem: {
       id: number;
       ordem: number;
-      destinoCatalogo: { id: number; nome: string; pais: string | null };
+      destinoCatalogo: DestinoCatalogo;
     };
   },
 ): AtividadeViagemListaDto => ({
@@ -68,6 +68,11 @@ export const paraAtividadeViagemListaDto = (
   destinoViagem: {
     id: atividade.destinoViagem.id,
     ordem: atividade.destinoViagem.ordem,
-    destinoCatalogo: atividade.destinoViagem.destinoCatalogo,
+    destinoCatalogo: {
+      id: atividade.destinoViagem.destinoCatalogo.id,
+      nome: atividade.destinoViagem.destinoCatalogo.nome,
+      pais: atividade.destinoViagem.destinoCatalogo.pais,
+      ...paraOrigemLugar(atividade.destinoViagem.destinoCatalogo),
+    },
   },
 });

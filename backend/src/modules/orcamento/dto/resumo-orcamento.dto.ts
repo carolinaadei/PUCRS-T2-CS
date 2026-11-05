@@ -19,7 +19,9 @@ export class GastoPorCategoriaDto {
 export class ResumoOrcamentoDto {
   @ApiProperty({
     example: true,
-    description: 'false enquanto a viagem nao tiver orcamento: total e percentuais ficam em 0',
+    description:
+      'false enquanto a viagem nao tiver orcamento: orcamentoTotal e percentuais ficam em 0; ' +
+      'totalPlanejado continua somando os custos das atividades',
   })
   orcamentoDefinido!: boolean;
 
@@ -31,7 +33,8 @@ export class ResumoOrcamentoDto {
 
   @ApiProperty({
     example: '11880.00',
-    description: 'orcamentoTotal - totalPlanejado. Negativo quando o planejado passa do orcamento',
+    description:
+      'orcamentoTotal - totalPlanejado. Pode ser negativo inclusive sem orcamento definido',
   })
   saldoDisponivel!: string;
 

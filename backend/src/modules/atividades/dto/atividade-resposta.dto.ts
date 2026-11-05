@@ -1,3 +1,4 @@
+import { OrigemLugarDto } from '../../../geoapify/geoapify.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { StatusAtividade, TipoAtividade } from '@prisma/client';
 import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
@@ -5,7 +6,7 @@ import { AvaliacaoDto } from '../../avaliacoes/dto/avaliacao-resposta.dto';
 import { DestinoCatalogoResumoDto } from '../../destinos/dto/destino-resposta.dto';
 
 /** Atividade/local do catalogo global. */
-export class CatalogoAtividadeDto {
+export class CatalogoAtividadeDto extends OrigemLugarDto {
   @ApiProperty({ example: 1 })
   id!: number;
 
@@ -38,17 +39,7 @@ export class CatalogoAtividadeDto {
   longitude!: number | null;
 
   @ApiProperty({ type: String, nullable: true, example: null })
-  googlePlaceId!: string | null;
-
-  @ApiProperty({ type: String, nullable: true, example: null })
   fotoUrl!: string | null;
-
-  @ApiProperty({
-    example: 'manual',
-    enum: ['manual', 'seed', 'google_places'],
-    description: 'Origem do cadastro',
-  })
-  fonte!: string;
 
   @ApiProperty({ example: 4.5, description: 'Media das notas, de 1 a 5 (0 sem avaliacoes)' })
   mediaAvaliacao!: number;

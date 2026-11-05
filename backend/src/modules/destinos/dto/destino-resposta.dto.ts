@@ -1,9 +1,10 @@
+import { OrigemLugarDto } from '../../../geoapify/geoapify.dto';
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { CategoriaDestino } from '@prisma/client';
 import { PaginaBaseDto } from '../../../common/dto/paginacao.dto';
 
 /** Destino (cidade) do catalogo global. */
-export class DestinoCatalogoDto {
+export class DestinoCatalogoDto extends OrigemLugarDto {
   @ApiProperty({ example: 1 })
   id!: number;
 
@@ -53,6 +54,10 @@ export class DestinoCatalogoResumoDto extends PickType(DestinoCatalogoDto, [
   'id',
   'nome',
   'pais',
+  'fonte',
+  'idExterno',
+  'codigoPais',
+  'atribuicoes',
 ] as const) {}
 
 export class PaginaDestinosDto extends PaginaBaseDto {

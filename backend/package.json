@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "demo": "node scripts/demo.mjs",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

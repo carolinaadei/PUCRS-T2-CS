@@ -4,6 +4,10 @@ API REST do ViajaJunto, aplicação web de planejamento colaborativo de viagens.
 Foi feita para ser consumida por qualquer front: contrato OpenAPI completo,
 versionado (`/api/v1`), com formato de erro único e códigos estáveis.
 
+O catálogo local pode ser complementado pela Geoapify: busca de cidades,
+autocompletar, pontos de interesse e importação com atribuição. Coloque
+`GEOAPIFY_API_KEY` no `backend/.env` e siga o [guia da Geoapify](../docs/geoapify.md).
+
 ## Stack
 
 | Camada | Tecnologia |
@@ -21,10 +25,11 @@ versionado (`/api/v1`), com formato de erro único e códigos estáveis.
 
 ### Tudo pelo Docker (recomendado)
 
-Na **raiz do repositório**:
+Copie `backend/.env.example` para `backend/.env` se ainda não existir e preencha
+`GEOAPIFY_API_KEY`. Na **raiz do repositório**:
 
 ```bash
-docker compose up -d --build --wait
+docker compose --env-file backend/.env up -d --build --wait
 ```
 
 Sobe Postgres, MiniStack, aplica a pilha CloudFormation, roda migrations e seed,
@@ -65,6 +70,7 @@ descomente o bloco AWS do `.env`.
 | ------- | --------- |
 | `npm run start:dev` | API em modo watch |
 | `npm run start:worker` | Worker que entrega os e-mails da fila SQS |
+| `npm run demo` | Ensaio interativo opcional; para gravar, siga a [demo pelo Swagger](../docs/demo-4-minutos.md) |
 | `npm run build` | Compila para `dist/` |
 | `npm run lint` / `lint:ci` | ESLint + Prettier (com correção / sem warnings) |
 | `npm test` / `test:cov` | Testes unitários |
@@ -109,6 +115,9 @@ Todas sob `/api/v1` (exceto health). Detalhes, exemplos e erros no Swagger.
 
 | Método | Rota | Requisito | Acesso |
 | ------ | ---- | --------- | ------ |
+| `GET` | `/lugares/cidades` | — | Autenticado; `autocompletar=true` para sugestões |
+| `GET` | `/lugares/atividades` | — | Autenticado |
+| `POST` | `/lugares/destinos/importar` · `/lugares/atividades/importar` | — | Autenticado |
 | `POST` | `/auth/registrar` | RF01 | Público |
 | `POST` | `/auth/login` | RF02 | Público |
 | `POST` | `/auth/refresh` | RF02 | Público |
@@ -164,6 +173,7 @@ backend/
     ├── main.ts                # le a configuracao da AWS e sobe a API
     ├── worker.ts              # processo que entrega os e-mails da fila
     ├── config/                # ambiente, configuracao da AWS, Swagger, setup HTTP
+    ├── geoapify/               # busca externa e importacao com atribuicao
     ├── aws/                   # S3 (upload assinado) e SQS (fila de e-mails)
     ├── common/                # erros, filtro, pipes, guards, decorators
     ├── prisma/                # PrismaService e travas de linha
@@ -195,8 +205,6 @@ As respostas nunca são entidades do Prisma: uma coluna nova no banco não muda 
 
 ## Pendências
 
-- **Google Places API** — o catálogo já tem `google_place_id` e `fonte`, mas a importação
-  automática de locais (Seção 2 da arquitetura) ainda não foi implementada.
 - **Rate limit compartilhado** — o contador fica em memória; com mais de uma instância
   da API, troque o storage do Throttler por Redis.
 

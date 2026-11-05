@@ -40,6 +40,7 @@ async function main() {
     update: {},
     create: {
       nome: 'Lisboa',
+      fonte: 'seed',
       pais: 'Portugal',
       categoria: CategoriaDestino.CIDADE,
       descricao: 'Capital portuguesa, entre miradouros e o Tejo.',
@@ -53,6 +54,7 @@ async function main() {
     update: {},
     create: {
       nome: 'Florianopolis',
+      fonte: 'seed',
       pais: 'Brasil',
       categoria: CategoriaDestino.PRAIA,
       descricao: 'Ilha com mais de 40 praias no litoral de Santa Catarina.',

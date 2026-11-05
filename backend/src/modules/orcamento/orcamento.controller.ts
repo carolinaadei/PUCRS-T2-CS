@@ -55,7 +55,9 @@ export class OrcamentoController {
     description:
       'Orcamento total, total planejado nas atividades, saldo disponivel e quanto cada ' +
       'categoria de atividade consome do orcamento. Atividades sem custo previsto nao entram ' +
-      'na conta. Sem orcamento, `orcamentoDefinido` vem `false` e o total e os percentuais, 0.',
+      'na conta. Sem orcamento, `orcamentoDefinido` vem `false`, `orcamentoTotal` vem "0.00" ' +
+      'e os percentuais ficam em 0. O saldo e sempre orcamentoTotal menos totalPlanejado: ' +
+      'pode ser negativo, inclusive sem orcamento (ex.: planejado "130.25", saldo "-130.25").',
   })
   @ApiOkResponse({ type: ResumoOrcamentoDto })
   @ApiAcessoViagem(NivelAcessoViagem.MEMBRO)

@@ -49,8 +49,6 @@ const ApiNaoEncontrada = () =>
   );
 const ApiSoQuemCadastrou = () =>
   ApiErro(403, CodigoErro.APENAS_QUEM_CADASTROU, 'So quem cadastrou pode alterar ou excluir');
-const ApiPlaceIdDuplicado = () =>
-  ApiErro(409, CodigoErro.GOOGLE_PLACE_ID_DUPLICADO, 'Ja existe atividade com este googlePlaceId');
 
 /** Catalogo global de atividades e locais. As consultas sao publicas. */
 @ApiTags('Atividades - Catalogo')
@@ -109,7 +107,6 @@ export class AtividadesCatalogoController {
   @ApiErroValidacao(
     'Tipo de atividade invalido: use PASSEIO, REFEICAO, HOSPEDAGEM, TRANSPORTE, OUTRO',
   )
-  @ApiPlaceIdDuplicado()
   criar(
     @UsuarioAtual() usuario: UsuarioAutenticado,
     @Body() dto: CriarCatalogoAtividadeDto,
@@ -128,7 +125,6 @@ export class AtividadesCatalogoController {
   @ApiErroValidacao('Informe uma URL valida para a foto')
   @ApiSoQuemCadastrou()
   @ApiNaoEncontrada()
-  @ApiPlaceIdDuplicado()
   atualizar(
     @UsuarioAtual() usuario: UsuarioAutenticado,
     @Param('id', ParseIdPipe) id: number,

@@ -11,10 +11,6 @@ ALTER TABLE "avaliacao" ADD COLUMN     "atualizado_em" TIMESTAMP(3) NOT NULL DEF
 ALTER TABLE "catalogo_atividade" ADD COLUMN     "criado_por" INTEGER,
 ALTER COLUMN "fonte" SET DEFAULT 'manual';
 
--- A importacao do Google Places nunca foi implementada: todo registro marcado
--- como 'google_places' foi, na verdade, cadastrado a mao pela API.
-UPDATE "catalogo_atividade" SET "fonte" = 'manual' WHERE "fonte" = 'google_places';
-
 -- AlterTable
 ALTER TABLE "destino_catalogo" ADD COLUMN     "criado_em" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 ADD COLUMN     "criado_por" INTEGER;

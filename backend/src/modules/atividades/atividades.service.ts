@@ -122,12 +122,10 @@ export class AtividadesService {
     usuarioId: number,
     dto: CriarCatalogoAtividadeDto,
   ): Promise<CatalogoAtividadeDto> {
-    const atividade = await this.comGooglePlaceIdUnico(() =>
-      this.prisma.catalogoAtividade.create({
-        data: { ...dto, fonte: 'manual', criadoPor: usuarioId },
-        include: CONTAR_AVALIACOES,
-      }),
-    );
+    const atividade = await this.prisma.catalogoAtividade.create({
+      data: { ...dto, fonte: 'manual', criadoPor: usuarioId },
+      include: CONTAR_AVALIACOES,
+    });
 
     return paraCatalogoAtividadeDto(atividade);
   }
@@ -139,13 +137,11 @@ export class AtividadesService {
   ): Promise<CatalogoAtividadeDto> {
     await this.garantirAutoria(usuarioId, id);
 
-    const atividade = await this.comGooglePlaceIdUnico(() =>
-      this.prisma.catalogoAtividade.update({
-        where: { id },
-        data: dto,
-        include: CONTAR_AVALIACOES,
-      }),
-    );
+    const atividade = await this.prisma.catalogoAtividade.update({
+      where: { id },
+      data: { ...dto, ...(dto.pais !== undefined && { codigoPais: null }) },
+      include: CONTAR_AVALIACOES,
+    });
 
     return paraCatalogoAtividadeDto(atividade);
   }
@@ -196,7 +192,7 @@ export class AtividadesService {
           select: {
             id: true,
             ordem: true,
-            destinoCatalogo: { select: { id: true, nome: true, pais: true } },
+            destinoCatalogo: true,
           },
         },
       },
@@ -338,22 +334,6 @@ export class AtividadesService {
         CodigoErro.APENAS_QUEM_CADASTROU,
         'So quem cadastrou esta atividade pode altera-la ou exclui-la',
       );
-    }
-  }
-
-  /** Converte a violacao do indice unico de google_place_id num 409 com codigo proprio. */
-  private async comGooglePlaceIdUnico<T>(operacao: () => Promise<T>): Promise<T> {
-    try {
-      return await operacao();
-    } catch (erro) {
-      if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-        throw conflito(
-          CodigoErro.GOOGLE_PLACE_ID_DUPLICADO,
-          'Ja existe atividade com este googlePlaceId',
-        );
-      }
-
-      throw erro;
     }
   }
 

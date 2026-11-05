@@ -59,7 +59,9 @@ export class UsuariosService {
         status: StatusViagem.CONCLUIDA,
         OR: [{ criadoPor: usuarioId }, { membros: { some: { usuarioId } } }],
       },
-      select: { destinos: { select: { destinoCatalogo: { select: { pais: true } } } } },
+      select: {
+        destinos: { select: { destinoCatalogo: { select: { pais: true, codigoPais: true } } } },
+      },
     });
 
     const contagemPorCodigo = new Map<string, PaisVisitadoDto>();
@@ -68,7 +70,9 @@ export class UsuariosService {
       const codigosNaViagem = new Set<string>();
 
       for (const destino of viagem.destinos) {
-        const resolvido = resolverPaisIso(destino.destinoCatalogo.pais);
+        const resolvido = resolverPaisIso(
+          destino.destinoCatalogo.codigoPais ?? destino.destinoCatalogo.pais,
+        );
         if (!resolvido || codigosNaViagem.has(resolvido.codigo)) {
           continue;
         }

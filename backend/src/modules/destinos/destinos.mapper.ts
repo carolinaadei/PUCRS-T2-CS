@@ -1,3 +1,4 @@
+import { paraOrigemLugar } from '../../geoapify/geoapify.dto';
 import { DestinoCatalogo, DestinoViagem } from '@prisma/client';
 import { paraDia } from '../../common/utils/formatos';
 import {
@@ -7,6 +8,7 @@ import {
 } from './dto/destino-resposta.dto';
 
 export const paraDestinoCatalogoDto = (destino: DestinoCatalogo): DestinoCatalogoDto => ({
+  ...paraOrigemLugar(destino),
   id: destino.id,
   nome: destino.nome,
   pais: destino.pais,

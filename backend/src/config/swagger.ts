@@ -90,6 +90,10 @@ export const criarDocumentoSwagger = (app: INestApplication): OpenAPIObject => {
       .addTag('Avaliacoes', 'Notas e comentarios das atividades')
       .addTag('Notificacoes', 'Avisos in-app de alteracoes nas viagens')
       .addTag('Uploads', 'Envio de fotos direto para o armazenamento')
+      .addTag(
+        'Lugares - Geoapify',
+        'Busca de cidades e lugares; importacao com origem e atribuicao',
+      )
       .addTag('Health', 'Monitoramento')
       .build(),
     { operationIdFactory: gerarOperationId },
